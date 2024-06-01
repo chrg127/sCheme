@@ -37,12 +37,12 @@ struct Exp {
 };
 
 VECTOR_DECLARE_INIT(List, Exp, list);
-VECTOR_DECLARE_WRITE(List, Exp, list);
+VECTOR_DECLARE_ADD(List, Exp, list);
 VECTOR_DECLARE_FREE(List, Exp, list);
 
-VECTOR_DEFINE_INIT(List, Exp, list, data)
-VECTOR_DEFINE_WRITE(List, Exp, list, data)
-VECTOR_DEFINE_FREE(List, Exp, list, data)
+VECTOR_DEFINE_INIT(List, Exp, list)
+VECTOR_DEFINE_ADD(List, Exp, list)
+VECTOR_DEFINE_FREE(List, Exp, list)
 
 char *substr(const char *s, size_t i, size_t j)
 {
@@ -95,7 +95,7 @@ Exp read_from_tokens(Tokenizer *t) {
         list_init(&list);
         Exp exp;
         while (exp = read_from_tokens(t), exp.type != 2) {
-            list_write(&list, exp);
+            list_add(&list, exp);
         }
         return (Exp) { .type = 1, .list = list };
     } else if (token[0] == ')') {
