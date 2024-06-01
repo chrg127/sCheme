@@ -4,19 +4,8 @@
 #include <string.h>
 #include <stdint.h>
 
-// utilities: can be removed (as long they're provided somewhere)
-
-#define ALLOCATE(type, count) \
-    (type *) calloc((count), sizeof(type))
-#define FREE_ARRAY(type, ptr, old) free(ptr);
-
 typedef uint32_t u32;
 typedef uint8_t  u8;
-
-static inline size_t vector_grow_cap(size_t old_cap)
-{
-    return old_cap < 8 ? 8 : old_cap * 2;
-}
 
 // sample hash function
 // algorithm: FNV-1a
@@ -84,7 +73,7 @@ static Entry *find_entry(Entry *entries, size_t cap, HtKey key)
 
 static void adjust_cap(HashTable *tab, size_t cap)
 {
-    Entry *entries = ALLOCATE(Entry, cap);
+    Entry *entries = HT_ALLOCATE(Entry, cap);
     for (size_t i = 0; i < cap; i++)
         make_empty(&entries[i]);
 
@@ -98,23 +87,10 @@ static void adjust_cap(HashTable *tab, size_t cap)
         dest->value = entry->value;
         tab->size++;
     }
-    FREE_ARRAY(Entry, tab->entries, tab->cap);
+    HT_FREE_ARRAY(Entry, tab->entries, tab->cap);
 
     tab->entries = entries;
     tab->cap     = cap;
-}
-
-void ht_init(HashTable *tab)
-{
-    tab->size    = 0;
-    tab->cap     = 0;
-    tab->entries = NULL;
-}
-
-void ht_free(HashTable *tab)
-{
-    FREE_ARRAY(Entry, tab->entries, tab->cap);
-    ht_init(tab);
 }
 
 bool ht_install(HashTable *tab, HtKey key, HtValue value)
@@ -124,7 +100,7 @@ bool ht_install(HashTable *tab, HtKey key, HtValue value)
         return false;
 
     if (tab->size + 1 > tab->cap * HT_MAX_LOAD) {
-        size_t cap = vector_grow_cap(tab->cap);
+        size_t cap = tab->cap < 8 ? 8 : tab->cap * 2;
         adjust_cap(tab, cap);
     }
 
@@ -167,9 +143,4 @@ void ht_add_all(HashTable *from, HashTable *to)
         if (is_empty_key(entry->key))
             ht_install(to, entry->key, entry->value);
     }
-}
-
-bool ht_empty_entry(Entry *entry)
-{
-    return is_empty_key(entry->key);
 }

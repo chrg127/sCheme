@@ -1,12 +1,7 @@
 #ifndef VECTOR_H_INCLUDED
 #define VECTOR_H_INCLUDED
 
-#define VECTOR_INIT(v) \
-    do { \
-        (v)->size = 0; \
-        (v)->cap  = 0; \
-        (v)->data = NULL; \
-    } while (0)
+#define VECTOR_INIT() { .size = 0, .cap = 0, .data = NULL }
 
 static inline size_t vector_grow_cap(size_t old_cap)
 {

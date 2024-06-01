@@ -1,44 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <string.h>
-#include "ht.h"
-#include "vector.h"
-
-typedef char *Symbol;   // A Scheme Symbol is implemented as a C string
-typedef int Number;     // A Scheme number is implemented as a C int
-
-// A Scheme Atom is a Symbol or Number
-typedef struct Atom {
-    int type;
-    union {
-        Symbol symbol;
-        Number number;
-    };
-} Atom;
-
-typedef struct Exp Exp;
-
-// A Scheme List is implemented as a resizable array of expressions
-typedef struct List {
-    Exp *data;
-    size_t size;
-    size_t cap;
-} List;
-
-// A Scheme expression is an Atom or a List
-struct Exp {
-    int type;
-    union {
-        Atom atom;
-        List list;
-    };
-};
-
-VECTOR_DECLARE_INIT(List, Exp, list);
-VECTOR_DECLARE_ADD(List, Exp, list);
-VECTOR_DECLARE_FREE(List, Exp, list);
+#include "scheme.h"
 
 VECTOR_DEFINE_INIT(List, Exp, list)
 VECTOR_DEFINE_ADD(List, Exp, list)
@@ -90,8 +50,8 @@ char *next_token(Tokenizer *t)
 Atom atom(char *token) {
     char *endptr;
     long num = strtol(token, &endptr, 0);
-    return endptr == token ? (Atom) { .type = 0, .symbol = token }
-                           : (Atom) { .type = 1, .number = num   };
+    return endptr == token ? (Atom) { .type = ATOM_SYMBOL, .symbol = token }
+                           : (Atom) { .type = ATOM_NUMBER, .number = num   };
 }
 
 // Read an expression from a sequence of tokens.
@@ -110,12 +70,12 @@ Exp read_from_tokens(Tokenizer *t) {
             list_add(&list, exp);
         }
         next_token(t); // pop off ')'
-        return (Exp) { .type = 1, .list = list };
+        return (Exp) { .type = EXP_LIST, .list = list };
     } else if (token[0] == ')') {
         fprintf(stderr, "unexpected ')'\n");
         exit(1);
     } else {
-        return (Exp) { .type = 0, .atom = atom(token) };
+        return (Exp) { .type = EXP_ATOM, .atom = atom(token) };
     }
 }
 
@@ -127,33 +87,124 @@ Exp parse(const char *s)
     return read_from_tokens(&t);
 }
 
-void print_exp(Exp exp)
+Exp *expdup(Exp exp)
+{
+    Exp *mem = malloc(sizeof(exp));
+    memcpy(mem, &exp, sizeof(exp));
+    return mem;
+}
+
+// An environment with some scheme standard procedures.
+HashTable standard_env()
+{
+    HashTable ht = HT_INIT();
+    ht_install(&ht, "+",  expdup(make_cproc_exp(scheme_sum)));
+    ht_install(&ht, "-",  expdup(make_cproc_exp(scheme_sub)));
+    ht_install(&ht, ">",  expdup(make_cproc_exp(scheme_gt)));
+    ht_install(&ht, "<",  expdup(make_cproc_exp(scheme_lt)));
+    ht_install(&ht, ">=", expdup(make_cproc_exp(scheme_ge)));
+    ht_install(&ht, "<=", expdup(make_cproc_exp(scheme_le)));
+    ht_install(&ht, "=",  expdup(make_cproc_exp(scheme_eq)));
+    ht_install(&ht, "begin", expdup(make_cproc_exp(scheme_begin)));
+    ht_install(&ht, "list", expdup(make_cproc_exp(scheme_list)));
+    return ht;
+}
+
+// Evaluate an expression in an environment.
+Exp eval(Exp x, HashTable env)
+{
+    if (is_symbol(x)) {
+        // variable reference
+        void *value;
+        bool found = ht_lookup(&env, x.atom.symbol, &value);
+        if (!found) {
+            fprintf(stderr, "error: couldn't find %s in env\n", x.atom.symbol);
+            exit(1);
+        }
+        return *((Exp *) value);
+    } else if (is_number(x)) {
+        // constant number
+        return x;
+    }
+    Exp first = x.list.data[0];
+    if (is_symbol(first) && strcmp(first.atom.symbol, "if") == 0) {
+        // conditional
+        Exp test        = x.list.data[1];
+        Exp conseq      = x.list.data[2];
+        Exp alt         = x.list.data[3];
+        Exp test_result = eval(test, env);
+        Exp exp = !is_number(test_result)
+               || (is_number(test_result) && test_result.atom.number != 0)
+               ? conseq : alt;
+        return eval(exp, env);
+    } else if (is_symbol(first) && strcmp(first.atom.symbol, "define") == 0) {
+        // definition
+        Exp symbol = x.list.data[1];
+        Exp exp    = x.list.data[2];
+        if (!is_symbol(symbol)) {
+            fprintf(stderr, "define: bad syntax\n");
+            exit(1);
+        }
+        ht_install(&env, symbol.atom.symbol, expdup(eval(exp, env)));
+        return (Exp) { .type = EXP_VOID };
+    }
+    // procedure call
+    Exp proc = eval(first, env);
+    if (proc.type != EXP_C_PROC) {
+        fprintf(stderr, "error: not a procedure\n");
+        exit(1);
+    }
+    List args = VECTOR_INIT();
+    for (size_t i = 1; i < x.list.size; i++) {
+        list_add(&args, eval(x.list.data[i], env));
+    }
+    return proc.proc(args);
+}
+
+void print(Exp exp)
 {
     switch (exp.type) {
-    case 0:
+    case EXP_ATOM:
         switch (exp.atom.type) {
-        case 0: printf("%s", exp.atom.symbol); break;
-        case 1: printf("%d", exp.atom.number); break;
+        case ATOM_SYMBOL: printf("%s", exp.atom.symbol); break;
+        case ATOM_NUMBER: printf("%d", exp.atom.number); break;
         }
         break;
-    case 1:
+    case EXP_LIST:
         printf("(");
         for (size_t i = 0; i < exp.list.size; i++) {
-            print_exp(exp.list.data[i]);
-            printf(" ");
+            print(exp.list.data[i]);
+            if (i != exp.list.size-1) {
+                printf(" ");
+            }
         }
         printf(")");
+        break;
+    case EXP_C_PROC:
+        printf("<built-in C proc>");
+        break;
+    case EXP_VOID:
+        printf("<void>");
         break;
     }
 }
 
-int main(int argc, char *argv[])
+// A prompt-read-eval-print loop.
+void repl()
 {
-    if (argc < 2) {
-        return 1;
+    HashTable env = standard_env();
+    while (true) {
+        printf("sCheme> ");
+        char input[BUFSIZ];
+        fgets(input, sizeof(input), stdin);
+        Exp val = eval(parse(input), env);
+        print(val);
+        printf("\n");
     }
-    Exp exp = parse(argv[1]);
-    print_exp(exp);
-    printf("\n");
+}
+
+int main()
+{
+    repl();
     return 0;
 }
