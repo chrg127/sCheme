@@ -1,4 +1,5 @@
 #include "scheme.h"
+#include "ht.h"
 
 VECTOR_DEFINE_INIT(List, Exp, list)
 VECTOR_DEFINE_ADD(List, Exp, list)
@@ -96,30 +97,54 @@ Exp *expdup(Exp exp)
 }
 
 // An environment with some scheme standard procedures.
-HashTable standard_env()
+Env standard_env()
 {
-    HashTable env = HT_INIT();
-    ht_install(&env, "+",  expdup(make_cproc_exp(scheme_sum)));
-    ht_install(&env, "-",  expdup(make_cproc_exp(scheme_sub)));
-    ht_install(&env, "*",  expdup(make_cproc_exp(scheme_mul)));
-    ht_install(&env, ">",  expdup(make_cproc_exp(scheme_gt)));
-    ht_install(&env, "<",  expdup(make_cproc_exp(scheme_lt)));
-    ht_install(&env, ">=", expdup(make_cproc_exp(scheme_ge)));
-    ht_install(&env, "<=", expdup(make_cproc_exp(scheme_le)));
-    ht_install(&env, "=",  expdup(make_cproc_exp(scheme_eq)));
-    ht_install(&env, "begin", expdup(make_cproc_exp(scheme_begin)));
-    ht_install(&env, "list", expdup(make_cproc_exp(scheme_list)));
-    ht_install(&env, "pi", expdup(make_number_exp(3.14159265358979323846)));
+    Env env = { .ht = HT_INIT(), .outer = NULL };
+    ht_install(&env.ht, "+",  expdup(make_cproc_exp(scheme_sum)));
+    ht_install(&env.ht, "-",  expdup(make_cproc_exp(scheme_sub)));
+    ht_install(&env.ht, "*",  expdup(make_cproc_exp(scheme_mul)));
+    ht_install(&env.ht, ">",  expdup(make_cproc_exp(scheme_gt)));
+    ht_install(&env.ht, "<",  expdup(make_cproc_exp(scheme_lt)));
+    ht_install(&env.ht, ">=", expdup(make_cproc_exp(scheme_ge)));
+    ht_install(&env.ht, "<=", expdup(make_cproc_exp(scheme_le)));
+    ht_install(&env.ht, "=",  expdup(make_cproc_exp(scheme_eq)));
+    ht_install(&env.ht, "begin", expdup(make_cproc_exp(scheme_begin)));
+    ht_install(&env.ht, "list", expdup(make_cproc_exp(scheme_list)));
+    ht_install(&env.ht, "pi", expdup(make_number_exp(3.14159265358979323846)));
     return env;
 }
 
+// Find the innermost Env where var appears.
+static inline Env *env_find(Env *env, char *var)
+{
+    if (!env)
+        return NULL;
+    if (ht_lookup(&env->ht, var, NULL))
+        return env;
+    return env_find(env->outer, var);
+}
+
+static inline Exp proc_call(Procedure *proc, List args)
+{
+    Env env = { .ht = HT_INIT(), .outer = proc->env };
+    for (size_t i = 0; i < args.size; i++) {
+        ht_install(&env.ht, proc->params.data[i].atom.symbol, expdup(args.data[i]));
+    }
+    return eval(*proc->body, &env);
+}
+
 // Evaluate an expression in an environment.
-Exp eval(Exp x, HashTable env)
+Exp eval(Exp x, Env *env)
 {
     if (is_symbol(x)) {
         // variable reference
+        Env *e = env_find(env, x.atom.symbol);
+        if (!e) {
+            fprintf(stderr, "undefined symbol: %s\n", x.atom.symbol);
+            exit(1);
+        }
         void *value;
-        bool found = ht_lookup(&env, x.atom.symbol, &value);
+        bool found = ht_lookup(&e->ht, x.atom.symbol, &value);
         if (!found) {
             fprintf(stderr, "error: couldn't find %s in env\n", x.atom.symbol);
             exit(1);
@@ -129,8 +154,10 @@ Exp eval(Exp x, HashTable env)
         // constant number
         return x;
     }
-    Exp first = x.list.data[0];
-    if (is_symbol(first) && strcmp(first.atom.symbol, "if") == 0) {
+    Exp op = x.list.data[0];
+    if (is_symbol(op) && strcmp(op.atom.symbol, "quote") == 0) {
+        return x.list.data[1];
+    } else if (is_symbol(op) && strcmp(op.atom.symbol, "if") == 0) {
         // conditional
         Exp test        = x.list.data[1];
         Exp conseq      = x.list.data[2];
@@ -140,7 +167,7 @@ Exp eval(Exp x, HashTable env)
                || (is_number(test_result) && test_result.atom.number != 0)
                ? conseq : alt;
         return eval(exp, env);
-    } else if (is_symbol(first) && strcmp(first.atom.symbol, "define") == 0) {
+    } else if (is_symbol(op) && strcmp(op.atom.symbol, "define") == 0) {
         // definition
         Exp symbol = x.list.data[1];
         Exp exp    = x.list.data[2];
@@ -148,12 +175,39 @@ Exp eval(Exp x, HashTable env)
             fprintf(stderr, "define: bad syntax\n");
             exit(1);
         }
-        ht_install(&env, symbol.atom.symbol, expdup(eval(exp, env)));
+        ht_install(&env->ht, symbol.atom.symbol, expdup(eval(exp, env)));
         return (Exp) { .type = EXP_VOID };
+    } else if (is_symbol(op) && strcmp(op.atom.symbol, "set!") == 0) {
+        // assignment
+        Exp symbol = x.list.data[1];
+        Exp exp    = x.list.data[2];
+        if (!is_symbol(symbol)) {
+            fprintf(stderr, "set!: bad syntax\n");
+            exit(1);
+        }
+        Env *e = env_find(env, symbol.atom.symbol);
+        if (!e) {
+            fprintf(stderr, "undefined symbol: %s\n", symbol.atom.symbol);
+            exit(1);
+        }
+        ht_install(&e->ht, symbol.atom.symbol, expdup(eval(exp, env)));
+        return (Exp) { .type = EXP_VOID };
+    } else if (is_symbol(op) && strcmp(op.atom.symbol, "lambda") == 0) {
+        // procedure
+        Exp params = x.list.data[1];
+        Exp body   = x.list.data[2];
+        return (Exp) {
+            .type = EXP_PROC,
+            .proc = {
+                .params = params.list,
+                .body   = expdup(body),
+                .env    = env
+            }
+        };
     }
     // procedure call
-    Exp proc = eval(first, env);
-    if (proc.type != EXP_C_PROC) {
+    Exp proc = eval(op, env);
+    if (proc.type != EXP_C_PROC && proc.type != EXP_PROC) {
         fprintf(stderr, "error: not a procedure\n");
         exit(1);
     }
@@ -161,7 +215,9 @@ Exp eval(Exp x, HashTable env)
     for (size_t i = 1; i < x.list.size; i++) {
         list_add(&args, eval(x.list.data[i], env));
     }
-    return proc.proc(args);
+    return proc.type == EXP_C_PROC
+        ? proc.cproc(args)
+        : proc_call(&proc.proc, args);
 }
 
 void print(Exp exp)
@@ -195,12 +251,12 @@ void print(Exp exp)
 // A prompt-read-eval-print loop.
 void repl()
 {
-    HashTable env = standard_env();
+    Env env = standard_env();
     while (true) {
         printf("sCheme> ");
         char input[BUFSIZ];
         fgets(input, sizeof(input), stdin);
-        Exp val = eval(parse(input), env);
+        Exp val = eval(parse(input), &env);
         print(val);
         printf("\n");
     }

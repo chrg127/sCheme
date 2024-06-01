@@ -31,11 +31,26 @@ typedef struct List {
     size_t cap;
 } List;
 
-// A Scheme expression is an Atom or a List
+// An environment: a hashtable of ("var": exp) pairs, with an outer Env.
+typedef struct Env {
+    HashTable ht;
+    struct Env *outer;
+} Env;
+
+// A user-defined Scheme procedure
+typedef struct Procedure {
+    List params;
+    Exp *body;
+    Env *env;
+} Procedure;
+
+// A Scheme expression is either an Atom, a List, a C Procedure,
+// a user-defined, Procedure, or void
 #define EXP_ATOM 0
 #define EXP_LIST 1
 #define EXP_C_PROC 2
 #define EXP_VOID 3
+#define EXP_PROC 4
 
 typedef Exp (*CProc)(List args);
 
@@ -44,7 +59,8 @@ struct Exp {
     union {
         Atom atom;
         List list;
-        CProc proc;
+        CProc cproc;
+        Procedure proc;
     };
 };
 
@@ -63,7 +79,7 @@ static inline Exp make_number_exp(double n)
 
 static inline Exp make_cproc_exp(CProc cproc)
 {
-    return (Exp) { .type = EXP_C_PROC, .proc = cproc };
+    return (Exp) { .type = EXP_C_PROC, .cproc = cproc };
 }
 
 Exp scheme_sum(List args);
@@ -77,4 +93,6 @@ Exp scheme_eq(List args);
 Exp scheme_abs(List args);
 Exp scheme_begin(List args);
 Exp scheme_list(List args);
+
+Exp eval(Exp x, Env *env);
 

@@ -24,8 +24,13 @@ Exp scheme_sum(List args)
 
 Exp scheme_sub(List args)
 {
-    double sub = 0;
-    for (size_t i = 0; i < args.size; i++) {
+    if (args.size == 0) die("-: arity mismatch\n");
+    if (!is_number(args.data[0])) die("-: not a number\n");
+    if (args.size == 1) {
+        return make_number_exp(-args.data[0].atom.number);
+    }
+    double sub = args.data[0].atom.number;
+    for (size_t i = 1; i < args.size; i++) {
         if (!is_number(args.data[i])) die("-: not a number\n");
         sub -= args.data[i].atom.number;
     }

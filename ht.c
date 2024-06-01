@@ -120,7 +120,8 @@ bool ht_lookup(HashTable *tab, HtKey key, HtValue *value)
     Entry *entry = find_entry(tab->entries, tab->cap, key);
     if (is_empty_key(entry->key))
         return false;
-    *value = entry->value;
+    if (value)
+        *value = entry->value;
     return true;
 }
 
