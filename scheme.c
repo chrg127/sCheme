@@ -29,7 +29,7 @@ typedef struct Tokenizer {
 char *next_token(Tokenizer *t)
 {
     t->prev = t->cur;
-    while (t->s[t->i] == ' ')
+    while (t->s[t->i] == ' ' || t->s[t->i] == '\n')
         t->i++;
     if (t->i == t->len) {
         t->cur = NULL;
@@ -40,7 +40,8 @@ char *next_token(Tokenizer *t)
         return t->cur;
     }
     size_t start = t->i;
-    while (t->s[t->i] != ' ' && t->s[t->i] != '(' && t->s[t->i] != ')' && t->i < t->len)
+    while (t->s[t->i] != ' ' && t->s[t->i] != '\n'
+        && t->s[t->i] != '(' && t->s[t->i] != ')' && t->i < t->len)
         t->i++;
     t->cur = substr(t->s, start, t->i);
     return t->cur;
@@ -97,17 +98,19 @@ Exp *expdup(Exp exp)
 // An environment with some scheme standard procedures.
 HashTable standard_env()
 {
-    HashTable ht = HT_INIT();
-    ht_install(&ht, "+",  expdup(make_cproc_exp(scheme_sum)));
-    ht_install(&ht, "-",  expdup(make_cproc_exp(scheme_sub)));
-    ht_install(&ht, ">",  expdup(make_cproc_exp(scheme_gt)));
-    ht_install(&ht, "<",  expdup(make_cproc_exp(scheme_lt)));
-    ht_install(&ht, ">=", expdup(make_cproc_exp(scheme_ge)));
-    ht_install(&ht, "<=", expdup(make_cproc_exp(scheme_le)));
-    ht_install(&ht, "=",  expdup(make_cproc_exp(scheme_eq)));
-    ht_install(&ht, "begin", expdup(make_cproc_exp(scheme_begin)));
-    ht_install(&ht, "list", expdup(make_cproc_exp(scheme_list)));
-    return ht;
+    HashTable env = HT_INIT();
+    ht_install(&env, "+",  expdup(make_cproc_exp(scheme_sum)));
+    ht_install(&env, "-",  expdup(make_cproc_exp(scheme_sub)));
+    ht_install(&env, "*",  expdup(make_cproc_exp(scheme_mul)));
+    ht_install(&env, ">",  expdup(make_cproc_exp(scheme_gt)));
+    ht_install(&env, "<",  expdup(make_cproc_exp(scheme_lt)));
+    ht_install(&env, ">=", expdup(make_cproc_exp(scheme_ge)));
+    ht_install(&env, "<=", expdup(make_cproc_exp(scheme_le)));
+    ht_install(&env, "=",  expdup(make_cproc_exp(scheme_eq)));
+    ht_install(&env, "begin", expdup(make_cproc_exp(scheme_begin)));
+    ht_install(&env, "list", expdup(make_cproc_exp(scheme_list)));
+    ht_install(&env, "pi", expdup(make_number_exp(3.14159265358979323846)));
+    return env;
 }
 
 // Evaluate an expression in an environment.
@@ -167,7 +170,7 @@ void print(Exp exp)
     case EXP_ATOM:
         switch (exp.atom.type) {
         case ATOM_SYMBOL: printf("%s", exp.atom.symbol); break;
-        case ATOM_NUMBER: printf("%d", exp.atom.number); break;
+        case ATOM_NUMBER: printf("%g", exp.atom.number); break;
         }
         break;
     case EXP_LIST:

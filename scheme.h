@@ -3,11 +3,12 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include <math.h>
 #include "ht.h"
 #include "vector.h"
 
 typedef char *Symbol;   // A Scheme Symbol is implemented as a C string
-typedef int Number;     // A Scheme number is implemented as a C int
+typedef double Number;     // A Scheme number is implemented as a C int
 
 // A Scheme Atom is a Symbol or Number
 #define ATOM_SYMBOL 0
@@ -55,7 +56,7 @@ VECTOR_DECLARE_FREE(List, Exp, list);
 static inline bool is_symbol(Exp exp) { return exp.type == EXP_ATOM && exp.atom.type == ATOM_SYMBOL; }
 static inline bool is_number(Exp exp) { return exp.type == EXP_ATOM && exp.atom.type == ATOM_NUMBER; }
 
-static inline Exp make_number_exp(int n)
+static inline Exp make_number_exp(double n)
 {
     return (Exp) { .type = EXP_ATOM, .atom = (Atom) { .type = ATOM_NUMBER, .number = n } };
 }
