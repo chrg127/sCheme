@@ -51,6 +51,7 @@ typedef struct Procedure {
 #define EXP_C_PROC 2
 #define EXP_VOID 3
 #define EXP_PROC 4
+#define EXP_EOF -1
 
 typedef Exp (*CProc)(List args);
 

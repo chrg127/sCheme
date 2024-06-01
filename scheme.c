@@ -61,15 +61,17 @@ Exp read_from_tokens(Tokenizer *t) {
     next_token(t);
     char *token = t->prev;
     if (token == NULL) {
-        fprintf(stderr, "error: unexpected EOF\n");
-        exit(1);
-    }
-    if (token[0] == '(') {
+        return (Exp) { .type = EXP_EOF };
+    } else if (token[0] == '(') {
         List list;
         list_init(&list);
         while (t->cur != NULL && t->cur[0] != ')') {
             Exp exp = read_from_tokens(t);
             list_add(&list, exp);
+        }
+        if (t->cur == NULL) {
+            fprintf(stderr, "error: unexpected EOF\n");
+            exit(1);
         }
         next_token(t); // pop off ')'
         return (Exp) { .type = EXP_LIST, .list = list };
@@ -142,7 +144,9 @@ static inline Exp proc_call(Procedure *proc, List args)
 // Evaluate an expression in an environment.
 Exp eval(Exp x, Env *env)
 {
-    if (is_symbol(x)) {
+    if (x.type == EXP_EOF) {
+        return x;
+    } else if (is_symbol(x)) {
         // variable reference
         Env *e = env_find(env, x.atom.symbol);
         if (!e) {
@@ -260,9 +264,13 @@ void repl()
     Env env = standard_env();
     while (true) {
         printf("sCheme> ");
-        char input[BUFSIZ];
+        char input[BUFSIZ] = {0};
         fgets(input, sizeof(input), stdin);
         Exp val = eval(parse(input), &env);
+        if (val.type == EXP_EOF) {
+            printf("\n");
+            return;
+        }
         print(val);
         printf("\n");
     }
