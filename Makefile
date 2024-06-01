@@ -1,8 +1,8 @@
 programname := scheme
-build := debug # can be: debug, release
+# can be: debug, release
+build := debug
 
 files := scheme.c ht.c
-objs := $(patsubst %,$(outdir)/%.o,$(files))
 
 CC := gcc
 CFLAGS := -Wall -Wextra -pedantic -I. -std=c11
@@ -19,6 +19,8 @@ else
 endif
 
 all: $(outdir)/$(programname)
+
+objs := $(patsubst %,$(outdir)/%.o,$(files))
 
 $(outdir)/$(programname): $(outdir) $(objs)
 	$(info Linking $@ ...)

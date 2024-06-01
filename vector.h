@@ -18,7 +18,7 @@ static inline size_t vector_grow_cap(size_t old_cap)
  * Modify them if you're using a custom allocator.
  */
 #define VECTOR_ARRAY_ALLOC(type, ptr, old, new) \
-    (type *) realloc(ptr, new)
+    (type *) realloc(ptr, sizeof(type) * new)
 
 #define VECTOR_ARRAY_FREE(type, ptr, size) \
     free(ptr)

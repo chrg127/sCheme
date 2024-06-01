@@ -47,32 +47,43 @@ VECTOR_DEFINE_FREE(List, Exp, list)
 char *substr(const char *s, size_t i, size_t j)
 {
     char *r = malloc(j - i + 1);
-    memcpy(r, s + i, j - i + 1);
+    memcpy(r, s + i, j - i);
     r[j - i] = '\0';
     return r;
 }
 
+// typedef struct Token {
+//     const char *s;
+//     size_t start, end;
+// } Token;
+
 typedef struct Tokenizer {
-    size_t i;
     const char *s;
     size_t len;
+    size_t i;
+    char *prev;
+    char *cur;
 } Tokenizer;
 
 // Parse next token from string inside tokenizer.
 char *next_token(Tokenizer *t)
 {
+    t->prev = t->cur;
     while (t->s[t->i] == ' ')
         t->i++;
     if (t->i == t->len) {
-        return NULL;
+        t->cur = NULL;
+        return t->cur;
     } else if (t->s[t->i] == '(' || t->s[t->i] == ')') {
         t->i++;
-        return t->s[t->i-1] == '(' ? "(" : ")";
+        t->cur = t->s[t->i-1] == '(' ? "(" : ")";
+        return t->cur;
     }
     size_t start = t->i;
     while (t->s[t->i] != ' ' && t->s[t->i] != '(' && t->s[t->i] != ')' && t->i < t->len)
         t->i++;
-    return substr(t->s, start, t->i);
+    t->cur = substr(t->s, start, t->i);
+    return t->cur;
 }
 
 // Numbers become numbers; every other token is a symbol.
@@ -85,7 +96,8 @@ Atom atom(char *token) {
 
 // Read an expression from a sequence of tokens.
 Exp read_from_tokens(Tokenizer *t) {
-    char *token = next_token(t);
+    next_token(t);
+    char *token = t->prev;
     if (token == NULL) {
         fprintf(stderr, "error: unexpected EOF\n");
         exit(1);
@@ -93,13 +105,15 @@ Exp read_from_tokens(Tokenizer *t) {
     if (token[0] == '(') {
         List list;
         list_init(&list);
-        Exp exp;
-        while (exp = read_from_tokens(t), exp.type != 2) {
+        while (t->cur != NULL && t->cur[0] != ')') {
+            Exp exp = read_from_tokens(t);
             list_add(&list, exp);
         }
+        next_token(t); // pop off ')'
         return (Exp) { .type = 1, .list = list };
     } else if (token[0] == ')') {
-        return (Exp) { .type = 2 }; // erroneous unless catched by a '('
+        fprintf(stderr, "unexpected ')'\n");
+        exit(1);
     } else {
         return (Exp) { .type = 0, .atom = atom(token) };
     }
@@ -109,6 +123,7 @@ Exp read_from_tokens(Tokenizer *t) {
 Exp parse(const char *s)
 {
     Tokenizer t = { .i = 0, .s = s, .len = strlen(s) };
+    next_token(&t);
     return read_from_tokens(&t);
 }
 
@@ -117,18 +132,18 @@ void print_exp(Exp exp)
     switch (exp.type) {
     case 0:
         switch (exp.atom.type) {
-        case 0: printf("%s\n", exp.atom.symbol); break;
-        case 1: printf("%d\n", exp.atom.number); break;
+        case 0: printf("%s", exp.atom.symbol); break;
+        case 1: printf("%d", exp.atom.number); break;
         }
         break;
     case 1:
+        printf("(");
         for (size_t i = 0; i < exp.list.size; i++) {
             print_exp(exp.list.data[i]);
+            printf(" ");
         }
+        printf(")");
         break;
-    case 2:
-        fprintf(stderr, "error: unexpected ')'\n");
-        exit(1);
     }
 }
 
@@ -139,5 +154,6 @@ int main(int argc, char *argv[])
     }
     Exp exp = parse(argv[1]);
     print_exp(exp);
+    printf("\n");
     return 0;
 }
