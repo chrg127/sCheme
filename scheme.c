@@ -111,6 +111,12 @@ Env standard_env()
     ht_install(&env.ht, "begin", expdup(make_cproc_exp(scheme_begin)));
     ht_install(&env.ht, "list", expdup(make_cproc_exp(scheme_list)));
     ht_install(&env.ht, "pi", expdup(make_number_exp(3.14159265358979323846)));
+    ht_install(&env.ht, "cons", expdup(make_cproc_exp(scheme_cons)));
+    ht_install(&env.ht, "car", expdup(make_cproc_exp(scheme_car)));
+    ht_install(&env.ht, "cdr", expdup(make_cproc_exp(scheme_cdr)));
+    ht_install(&env.ht, "length", expdup(make_cproc_exp(scheme_length)));
+    ht_install(&env.ht, "null?", expdup(make_cproc_exp(scheme_is_null)));
+    // ht_install(&env.ht, "eq?", expdup(make_cproc_exp(scheme_is_eq)));
     return env;
 }
 

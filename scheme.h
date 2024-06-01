@@ -82,6 +82,11 @@ static inline Exp make_cproc_exp(CProc cproc)
     return (Exp) { .type = EXP_C_PROC, .cproc = cproc };
 }
 
+static inline Exp mklist(List l)
+{
+    return (Exp) { .type = EXP_LIST, .list = l };
+}
+
 Exp scheme_sum(List args);
 Exp scheme_sub(List args);
 Exp scheme_mul(List args);
@@ -93,6 +98,12 @@ Exp scheme_eq(List args);
 Exp scheme_abs(List args);
 Exp scheme_begin(List args);
 Exp scheme_list(List args);
+Exp scheme_cons(List args);
+Exp scheme_car(List args);
+Exp scheme_cdr(List args);
+Exp scheme_length(List args);
+Exp scheme_is_null(List args);
+Exp scheme_is_eq(List args);
 
 Exp eval(Exp x, Env *env);
 
