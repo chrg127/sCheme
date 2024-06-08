@@ -186,50 +186,63 @@ Exp scheme_is_null(List args)
 
 Exp scheme_is_eq(List args)
 {
-    return mknum(0);
-    // if (args.size != 2) die("eq?: arity mismatch\n");
-    // if (args.data[0].type != args.data[1].type)
-    //     return false;
-    // Exp first = args.data[0], second = args.data[1];
-    // switch (first.type) {
-    // case EXP_ATOM:
-    //     if (first.atom.type != second.atom.type)
-    //         return false;
-    //     switch (first.atom.type) {
-    //     case EXP_NUMBER: return first.atom.number == second.atom.number;
-    //     case EXP_NUMBER: return first.atom.symbol == second.atom.symbol;
-    //     }
-    //     break;
-    // case EXP_LIST: return first.list.data == second.list.data;
-    // case EXP_C_PROC: return first.cproc == second.cproc
-    // case EXP_PROC: return first.proc.params.data == second.proc.params.data
-    //                    && first.proc.body == second.proc.body
-    //                    && first.proc.env  == second.proc.env;
-    // }
+    if (args.size != 2) die("eq?: arity mismatch\n");
+    if (args.data[0].type != args.data[1].type) {
+        return SCHEME_FALSE;
+    }
+    Exp first = args.data[0], second = args.data[1];
+    switch (first.type) {
+    case EXP_ATOM:
+        if (first.atom.type != second.atom.type) {
+            return SCHEME_FALSE;
+        }
+        switch (first.atom.type) {
+        case ATOM_NUMBER: return mknum(first.atom.number == second.atom.number);
+        case ATOM_SYMBOL: return mknum(first.atom.symbol == second.atom.symbol);
+        }
+        break;
+    case EXP_LIST:   return mknum(first.list.data == second.list.data);
+    case EXP_C_PROC: return mknum(first.cproc == second.cproc);
+    case EXP_PROC:   return mknum(first.proc == second.proc);
+    }
+    return SCHEME_FALSE;
+}
+
+static Exp _equal(Exp first, Exp second)
+{
+    switch (first.type) {
+    case EXP_ATOM:
+        if (first.atom.type != second.atom.type)
+            return SCHEME_FALSE;
+        switch (first.atom.type) {
+        case ATOM_NUMBER: return mknum(first.atom.number == second.atom.number);
+        case ATOM_SYMBOL: return mknum(first.atom.symbol == second.atom.symbol);
+        }
+        break;
+    case EXP_LIST:
+        if (first.list.size != second.list.size) {
+            return SCHEME_FALSE;
+        }
+        for (size_t i = 0; i < first.list.size; i++) {
+            Exp res = _equal(first.list.data[i], second.list.data[i]);
+            if (res.atom.number == 0) {
+                return SCHEME_FALSE;
+            }
+        }
+        return SCHEME_TRUE;
+    case EXP_C_PROC: return mknum(first.cproc == second.cproc);
+    case EXP_PROC:   return mknum(first.proc == second.proc);
+    }
+    return SCHEME_FALSE;
 }
 
 Exp scheme_equal(List args)
 {
-    return mknum(0);
-//     if (args.size != 2) die("eq?: arity mismatch\n");
-//     if (args.data[0].type != args.data[1].type)
-//         return false;
-//     Exp first = args.data[0], second = args.data[1];
-//     switch (first.type) {
-//     case EXP_ATOM:
-//         if (first.atom.type != second.atom.type)
-//             return false;
-//         switch (first.atom.type) {
-//         case EXP_NUMBER: return first.atom.number == second.atom.number;
-//         case EXP_NUMBER: return first.atom.symbol == second.atom.symbol;
-//         }
-//         break;
-//     case EXP_LIST:
-//     case EXP_C_PROC: return first.cproc == second.cproc
-//     case EXP_PROC: return first.proc.params.data == second.proc.params.data
-//                        && first.proc.body == second.proc.body
-//                        && first.proc.env  == second.proc.env;
-//     }
+    if (args.size != 2) die("eq?: arity mismatch\n");
+    if (args.data[0].type != args.data[1].type) {
+        return SCHEME_FALSE;
+    }
+    return _equal(args.data[0], args.data[1]);
 }
 
 // (append . lst)

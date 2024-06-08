@@ -101,6 +101,9 @@ static inline Exp mklist(List l)
     return (Exp) { .type = EXP_LIST, .list = l };
 }
 
+#define SCHEME_TRUE mknum(1)
+#define SCHEME_FALSE mknum(0)
+
 Exp scheme_sum(List args);
 Exp scheme_sub(List args);
 Exp scheme_mul(List args);
