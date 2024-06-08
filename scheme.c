@@ -1,81 +1,75 @@
 #include "scheme.h"
 #include "ht.h"
+#include "memory.h"
 
 VECTOR_DEFINE_INIT(List, Exp, list)
 VECTOR_DEFINE_ADD(List, Exp, list)
 VECTOR_DEFINE_FREE(List, Exp, list)
 
-static char *substr(const char *s, size_t i, size_t j)
-{
-    char *r = calloc(j - i + 1, sizeof(char));
-    memcpy(r, s + i, j - i);
-    r[j - i] = '\0';
-    return r;
-}
-
-// typedef struct Token {
-//     const char *s;
-//     size_t start, end;
-// } Token;
+typedef struct Token {
+    const char *s;
+    size_t start, end;
+} Token;
 
 typedef struct Tokenizer {
     const char *s;
     size_t len;
     size_t i;
-    char *prev;
-    char *cur;
+    Token prev;
+    Token cur;
 } Tokenizer;
 
 // Parse next token from string inside tokenizer.
-static char *next_token(Tokenizer *t)
+static Token next_token(Tokenizer *t)
 {
     t->prev = t->cur;
     while (t->s[t->i] == ' ' || t->s[t->i] == '\n')
         t->i++;
     if (t->i == t->len) {
-        t->cur = NULL;
-        return t->cur;
+        t->cur = (Token) { .s = NULL, .start = 0, .end = 0 };
+        return t->prev;
     } else if (t->s[t->i] == '(' || t->s[t->i] == ')') {
         t->i++;
-        t->cur = t->s[t->i-1] == '(' ? "(" : ")";
-        return t->cur;
+        t->cur = (Token) { .s = t->s[t->i-1] == '(' ? "(" : ")", .start = 0, .end = 0 };
+        return t->prev;
     }
     size_t start = t->i;
     while (t->s[t->i] != ' ' && t->s[t->i] != '\n'
         && t->s[t->i] != '(' && t->s[t->i] != ')' && t->i < t->len)
         t->i++;
-    t->cur = substr(t->s, start, t->i);
+    t->cur = (Token) { .s = t->s, .start = start, .end = t->i };
     return t->prev;
 }
 
 // Numbers become numbers; every other token is a symbol.
-static Atom atom(char *token)
+static Atom atom(Token token)
 {
     char *endptr;
-    long num = strtol(token, &endptr, 0);
-    return endptr == token ? (Atom) { .type = ATOM_SYMBOL, .symbol = token }
-                           : (Atom) { .type = ATOM_NUMBER, .number = num   };
+    long num = strtol(token.s + token.start, &endptr, 0);
+    return endptr == token.s + token.start
+        ? (Atom) { .type = ATOM_SYMBOL, .symbol = mem_strdup(token.s + token.start, token.end - token.start) }
+        : (Atom) { .type = ATOM_NUMBER, .number = num };
 }
 
 // Read an expression from a sequence of tokens.
 static Exp read_from_tokens(Tokenizer *t)
 {
-    char *token = next_token(t);
-    if (token == NULL) {
+    Token token = next_token(t);
+    if (token.s == NULL) {
         return (Exp) { .type = EXP_EOF };
-    } else if (token[0] == '(') {
+    } else if (token.s[token.start] == '(') {
         List list = VECTOR_INIT();
-        while (t->cur != NULL && t->cur[0] != ')') {
+        while (t->cur.s != NULL && t->cur.s[0] != ')') {
             Exp exp = read_from_tokens(t);
             list_add(&list, exp);
         }
-        if (t->cur == NULL) {
+        if (t->cur.s == NULL) {
             fprintf(stderr, "error: unexpected EOF\n");
             exit(1);
         }
         next_token(t); // pop off ')'
         return mklist(list);
-    } else if (token[0] == ')') {
+    } else if (token.s[token.start] == ')') {
         fprintf(stderr, "unexpected ')'\n");
         exit(1);
     } else {
@@ -93,15 +87,16 @@ static Exp parse(const char *s)
 
 static Exp *expdup(Exp exp)
 {
-    Exp *mem = calloc(1, sizeof(exp));
+    Exp *mem = ALLOCATE(Exp, 1);
     memcpy(mem, &exp, sizeof(exp));
+    mem->marked = false;
     return mem;
 }
 
 // An environment with some scheme standard procedures.
 static Env standard_env()
 {
-    Env env = { .ht = HT_INIT(), .outer = NULL };
+    Env env = { .ht = HT_INIT_WITH_ALLOCATOR(reallocate), .outer = NULL };
     ht_install(&env.ht, "+",          expdup(mkcproc(scheme_sum)));
     ht_install(&env.ht, "-",          expdup(mkcproc(scheme_sub)));
     ht_install(&env.ht, "*",          expdup(mkcproc(scheme_mul)));
@@ -144,20 +139,14 @@ static inline Env *env_find(Env *env, char *var)
 
 Exp proc_call(Procedure *proc, List args)
 {
-    Env env = { .ht = HT_INIT(), .outer = proc->env };
+    Env env = { .ht = HT_INIT_WITH_ALLOCATOR(reallocate), .outer = proc->env };
+    gc_set_current_env(&env);
     for (size_t i = 0; i < args.size; i++) {
         ht_install(&env.ht, proc->params.data[i].atom.symbol, expdup(args.data[i]));
     }
-    return eval(proc->body, &env);
-}
-
-static Exp mkproc(List params, Exp body, Env *env)
-{
-    Procedure *p = calloc(1, sizeof(Procedure));
-    p->params = params;
-    p->body = body;
-    p->env = env;
-    return (Exp) { .type = EXP_PROC, .proc = p };
+    Exp exp = eval(proc->body, &env);
+    gc_set_current_env(env.outer);
+    return exp;
 }
 
 // Evaluate an expression in an environment.
@@ -225,7 +214,7 @@ Exp eval(Exp x, Env *env)
         // procedure
         Exp params = x.list.data[1];
         Exp body   = x.list.data[2];
-        return mkproc(params.list, body, env);
+        return mkproc(params.list, expdup(body), env);
     }
     // procedure call
     Exp proc = eval(op, env);
@@ -274,11 +263,16 @@ static void print(Exp exp)
 static void repl()
 {
     Env env = standard_env();
+    gc_set_current_env(&env);
     while (true) {
         printf("sCheme> ");
         char input[BUFSIZ] = {0};
         fgets(input, sizeof(input), stdin);
-        Exp val = eval(parse(input), &env);
+        Exp parsed = parse(input);
+        printf("parsed = ");
+        print(parsed);
+        printf("\n");
+        Exp val = eval(parsed, &env);
         if (val.type == EXP_EOF) {
             printf("\n");
             return;

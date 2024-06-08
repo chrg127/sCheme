@@ -2,7 +2,7 @@ programname := scheme
 # can be: debug, release
 build := debug
 
-files := scheme.c ht.c cprocs.c
+files := scheme.c ht.c cprocs.c memory.c
 
 CC := gcc
 CFLAGS := -Wall -Wextra -pedantic -I. -std=c11
