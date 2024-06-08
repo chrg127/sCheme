@@ -31,21 +31,18 @@ typedef struct List {
     size_t cap;
 } List;
 
+VECTOR_DECLARE_INIT(List, Exp, list);
+VECTOR_DECLARE_ADD(List, Exp, list);
+VECTOR_DECLARE_FREE(List, Exp, list);
+
 // An environment: a hashtable of ("var": exp) pairs, with an outer Env.
 typedef struct Env {
     HashTable ht;
     struct Env *outer;
 } Env;
 
-// A user-defined Scheme procedure
-typedef struct Procedure {
-    List params;
-    Exp *body;
-    Env *env;
-} Procedure;
-
 // A Scheme expression is either an Atom, a List, a C Procedure,
-// a user-defined, Procedure, or void
+// a user-defined Procedure or void
 #define EXP_ATOM 0
 #define EXP_LIST 1
 #define EXP_C_PROC 2
@@ -53,7 +50,8 @@ typedef struct Procedure {
 #define EXP_PROC 4
 #define EXP_EOF -1
 
-typedef Exp (*CProc)(List args, Env *env);
+typedef Exp (*CProc)(List args);
+typedef struct Procedure Procedure;
 
 struct Exp {
     int type;
@@ -61,13 +59,16 @@ struct Exp {
         Atom atom;
         List list;
         CProc cproc;
-        Procedure proc;
+        Procedure *proc;
     };
 };
 
-VECTOR_DECLARE_INIT(List, Exp, list);
-VECTOR_DECLARE_ADD(List, Exp, list);
-VECTOR_DECLARE_FREE(List, Exp, list);
+// A user-defined Scheme procedure
+typedef struct Procedure {
+    List params;
+    Exp body;
+    Env *env;
+} Procedure;
 
 // Some utilities for working with Exp.
 static inline bool is_symbol(Exp exp)
@@ -100,33 +101,33 @@ static inline Exp mklist(List l)
     return (Exp) { .type = EXP_LIST, .list = l };
 }
 
-Exp scheme_sum(List args, Env *env);
-Exp scheme_sub(List args, Env *env);
-Exp scheme_mul(List args, Env *env);
-Exp scheme_gt(List args, Env *env);
-Exp scheme_lt(List args, Env *env);
-Exp scheme_ge(List args, Env *env);
-Exp scheme_le(List args, Env *env);
-Exp scheme_eq(List args, Env *env);
-Exp scheme_abs(List args, Env *env);
-Exp scheme_begin(List args, Env *env);
-Exp scheme_list(List args, Env *env);
-Exp scheme_cons(List args, Env *env);
-Exp scheme_car(List args, Env *env);
-Exp scheme_cdr(List args, Env *env);
-Exp scheme_length(List args, Env *env);
-Exp scheme_is_null(List args, Env *env);
-Exp scheme_is_eq(List args, Env *env);
-Exp scheme_equal(List args, Env *env);
-Exp scheme_not(List args, Env *env);
-Exp scheme_and(List args, Env *env);
-Exp scheme_or(List args, Env *env);
-Exp scheme_append(List args, Env *env);
-Exp scheme_apply(List args, Env *env);
-Exp scheme_is_list(List args, Env *env);
-Exp scheme_is_number(List args, Env *env);
-Exp scheme_is_proc(List args, Env *env);
-Exp scheme_is_symbol(List args, Env *env);
+Exp scheme_sum(List args);
+Exp scheme_sub(List args);
+Exp scheme_mul(List args);
+Exp scheme_gt(List args);
+Exp scheme_lt(List args);
+Exp scheme_ge(List args);
+Exp scheme_le(List args);
+Exp scheme_eq(List args);
+Exp scheme_abs(List args);
+Exp scheme_begin(List args);
+Exp scheme_list(List args);
+Exp scheme_cons(List args);
+Exp scheme_car(List args);
+Exp scheme_cdr(List args);
+Exp scheme_length(List args);
+Exp scheme_is_null(List args);
+Exp scheme_is_eq(List args);
+Exp scheme_equal(List args);
+Exp scheme_not(List args);
+Exp scheme_and(List args);
+Exp scheme_or(List args);
+Exp scheme_append(List args);
+Exp scheme_apply(List args);
+Exp scheme_is_list(List args);
+Exp scheme_is_number(List args);
+Exp scheme_is_proc(List args);
+Exp scheme_is_symbol(List args);
 
 Exp eval(Exp x, Env *env);
 Exp proc_call(Procedure *proc, List args);

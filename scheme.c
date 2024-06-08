@@ -7,7 +7,7 @@ VECTOR_DEFINE_FREE(List, Exp, list)
 
 char *substr(const char *s, size_t i, size_t j)
 {
-    char *r = malloc(j - i + 1);
+    char *r = calloc(j - i + 1, sizeof(char));
     memcpy(r, s + i, j - i);
     r[j - i] = '\0';
     return r;
@@ -93,7 +93,7 @@ Exp parse(const char *s)
 
 Exp *expdup(Exp exp)
 {
-    Exp *mem = malloc(sizeof(exp));
+    Exp *mem = calloc(1, sizeof(exp));
     memcpy(mem, &exp, sizeof(exp));
     return mem;
 }
@@ -148,7 +148,16 @@ Exp proc_call(Procedure *proc, List args)
     for (size_t i = 0; i < args.size; i++) {
         ht_install(&env.ht, proc->params.data[i].atom.symbol, expdup(args.data[i]));
     }
-    return eval(*proc->body, &env);
+    return eval(proc->body, &env);
+}
+
+Exp mkproc(List params, Exp body, Env *env)
+{
+    Procedure *p = calloc(1, sizeof(Procedure));
+    p->params = params;
+    p->body = body;
+    p->env = env;
+    return (Exp) { .type = EXP_PROC, .proc = p };
 }
 
 // Evaluate an expression in an environment.
@@ -216,14 +225,7 @@ Exp eval(Exp x, Env *env)
         // procedure
         Exp params = x.list.data[1];
         Exp body   = x.list.data[2];
-        return (Exp) {
-            .type = EXP_PROC,
-            .proc = {
-                .params = params.list,
-                .body   = expdup(body),
-                .env    = env
-            }
-        };
+        return mkproc(params.list, body, env);
     }
     // procedure call
     Exp proc = eval(op, env);
@@ -236,8 +238,8 @@ Exp eval(Exp x, Env *env)
         list_add(&args, eval(x.list.data[i], env));
     }
     return proc.type == EXP_C_PROC
-        ? proc.cproc(args, env)
-        : proc_call(&proc.proc, args);
+        ? proc.cproc(args)
+        : proc_call(proc.proc, args);
 }
 
 void print(Exp exp)
