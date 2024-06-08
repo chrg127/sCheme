@@ -35,13 +35,13 @@ static inline bool value_equal(HtValue a, HtValue b)
 }
 
 // note that empty entries and tombstone entries must both have empty keys
-static inline void make_empty(Entry *entry)
+static inline void make_empty(HtEntry *entry)
 {
     entry->key   = NULL;
     entry->value = NULL;
 }
 
-static inline void make_tombstone(Entry *entry)
+static inline void make_tombstone(HtEntry *entry)
 {
     entry->key   = NULL;
     entry->value = (void *) 0xdeadbeef;
@@ -53,12 +53,12 @@ static inline void make_tombstone(Entry *entry)
 
 #define HT_MAX_LOAD 0.75
 
-static Entry *find_entry(Entry *entries, size_t cap, HtKey key)
+static HtEntry *find_entry(HtEntry *entries, size_t cap, HtKey key)
 {
     u32 i = hash(key) % cap;
-    Entry *first_tombstone = NULL;
+    HtEntry *first_tombstone = NULL;
     for (;;) {
-        Entry *ptr = &entries[i];
+        HtEntry *ptr = &entries[i];
         // an entry is a tombstone if the key is empty and the value is not
         if (is_empty_key(ptr->key)) {
             if (is_empty_value(ptr->value))
@@ -73,22 +73,22 @@ static Entry *find_entry(Entry *entries, size_t cap, HtKey key)
 
 static void adjust_cap(HashTable *tab, size_t cap)
 {
-    Entry *entries = HT_ALLOCATE(Entry, cap);
+    HtEntry *entries = (HtEntry *) tab->allocate(NULL, sizeof(HtEntry) * tab->cap, sizeof(HtEntry) * cap);
     for (size_t i = 0; i < cap; i++)
         make_empty(&entries[i]);
 
     tab->size = 0;
     for (size_t i = 0; i < tab->cap; i++) {
-        Entry *entry = &tab->entries[i];
+        HtEntry *entry = &tab->entries[i];
         if (is_empty_key(entry->key))
             continue;
-        Entry *dest = find_entry(entries, cap, entry->key);
+        HtEntry *dest = find_entry(entries, cap, entry->key);
         dest->key   = entry->key;
         dest->value = entry->value;
         tab->size++;
     }
-    HT_FREE_ARRAY(Entry, tab->entries, tab->cap);
-
+    // free tab's array
+    tab->allocate(tab->entries, tab->cap, 0);
     tab->entries = entries;
     tab->cap     = cap;
 }
@@ -104,7 +104,7 @@ bool ht_install(HashTable *tab, HtKey key, HtValue value)
         adjust_cap(tab, cap);
     }
 
-    Entry *entry = find_entry(tab->entries, tab->cap, key);
+    HtEntry *entry = find_entry(tab->entries, tab->cap, key);
     bool is_new = is_empty_key(entry->key);
     if (is_new && is_empty_value(entry->value))
         tab->size++;
@@ -117,7 +117,7 @@ bool ht_lookup(HashTable *tab, HtKey key, HtValue *value)
 {
     if (tab->size == 0)
         return false;
-    Entry *entry = find_entry(tab->entries, tab->cap, key);
+    HtEntry *entry = find_entry(tab->entries, tab->cap, key);
     if (is_empty_key(entry->key))
         return false;
     if (value)
@@ -129,7 +129,7 @@ bool ht_delete(HashTable *tab, HtKey key)
 {
     if (tab->size == 0)
         return false;
-    Entry *entry = find_entry(tab->entries, tab->cap, key);
+    HtEntry *entry = find_entry(tab->entries, tab->cap, key);
     if (is_empty_key(entry->key))
         return false;
     // place a tombstone
@@ -140,7 +140,7 @@ bool ht_delete(HashTable *tab, HtKey key)
 void ht_add_all(HashTable *from, HashTable *to)
 {
     for (size_t i = 0; i < from->cap; i++) {
-        Entry *entry = &from->entries[i];
+        HtEntry *entry = &from->entries[i];
         if (is_empty_key(entry->key))
             ht_install(to, entry->key, entry->value);
     }

@@ -5,36 +5,57 @@
 #include <stddef.h>
 #include <stdlib.h>
 
-#define HT_ALLOCATE(type, count) \
-    (type *) calloc((count), sizeof(type))
-#define HT_FREE_ARRAY(type, ptr, old) free(ptr);
-
 typedef char *HtKey;
 typedef void *HtValue;
+typedef void *(*HtAllocator)(void *ptr, size_t old, size_t new);
 
 typedef struct {
-    HtValue key;
+    HtKey key;
     HtValue value;
-} Entry;
+} HtEntry;
 
 typedef struct HashTable {
     size_t size;
     size_t cap;
-    Entry *entries;
+    HtEntry *entries;
+    HtAllocator allocate;
 } HashTable;
 
-#define HT_INIT() { .size = 0, .cap = 0, .entries = NULL }
+static inline void *ht_default_allocator(void *ptr, size_t old, size_t new)
+{
+    (void) old;
+    if (new == 0) {
+        free(ptr);
+        return NULL;
+    }
+    return realloc(ptr, new);
+}
+
+#define HT_INIT() \
+{ .size = 0, .cap = 0, .entries = NULL, .allocate = ht_default_allocator }
+
+#define HT_INIT_WITH_ALLOCATOR(allocator) \
+{ .size = 0, .cap = 0, .entries = NULL, .allocate = allocator }
 
 static inline void ht_init(HashTable *tab)
 {
     tab->size    = 0;
     tab->cap     = 0;
     tab->entries = NULL;
+    tab->allocate = ht_default_allocator;
+}
+
+static inline void ht_init_with_allocator(HashTable *tab, HtAllocator allocator)
+{
+    tab->size    = 0;
+    tab->cap     = 0;
+    tab->entries = NULL;
+    tab->allocate = allocator;
 }
 
 static inline void ht_free(HashTable *tab)
 {
-    HT_FREE_ARRAY(Entry, tab->entries, tab->cap);
+    tab->allocate(tab->entries, sizeof(HtEntry) * tab->cap, 0);
     ht_init(tab);
 }
 
@@ -52,7 +73,7 @@ bool ht_delete(HashTable *tab, HtKey key);
 void ht_add_all(HashTable *from, HashTable *to);
 
 #define HT_FOR_EACH(tab, entry) \
-    for (Entry *entry = tab->entries; ((size_t) (entry - tab->entries)) < tab->cap; entry++)
+    for (HtEntry *entry = (tab)->entries; ((size_t) (entry - (tab)->entries)) < (tab)->cap; entry++)
 
 #endif
 
