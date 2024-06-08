@@ -48,10 +48,17 @@ Exp scheme_mul(List args)
     return mknum(mul);
 }
 
+Exp scheme_abs(List args)
+{
+    if (args.size != 1) die("=: arity mismatch\n");
+    if (!is_number(args.data[0])) die("=: not a number\n");
+    return mknum(fabs(args.data[0].atom.number));
+}
+
 Exp scheme_gt(List args)
 {
     if (args.size == 0) die(">: arity mismatch\n");
-    if (args.size == 1) return mknum(1);
+    if (args.size == 1) return SCHEME_TRUE;
     if (!is_number(args.data[0]) || !is_number(args.data[1]))
         die(">: not a number\n");
     return mknum(args.data[0].atom.number > args.data[1].atom.number);
@@ -60,7 +67,7 @@ Exp scheme_gt(List args)
 Exp scheme_lt(List args)
 {
     if (args.size == 0) die("<: arity mismatch\n");
-    if (args.size == 1) return mknum(1);
+    if (args.size == 1) return SCHEME_TRUE;
     if (!is_number(args.data[0]) || !is_number(args.data[1]))
         die("<: not a number\n");
     return mknum(args.data[0].atom.number < args.data[1].atom.number);
@@ -69,7 +76,7 @@ Exp scheme_lt(List args)
 Exp scheme_ge(List args)
 {
     if (args.size == 0) die(">=: arity mismatch\n");
-    if (args.size == 1) return mknum(1);
+    if (args.size == 1) return SCHEME_TRUE;
     if (!is_number(args.data[0]) || !is_number(args.data[1]))
         die(">=: not a number\n");
     return mknum(args.data[0].atom.number >= args.data[1].atom.number);
@@ -78,7 +85,7 @@ Exp scheme_ge(List args)
 Exp scheme_le(List args)
 {
     if (args.size == 0) die("<=: arity mismatch\n");
-    if (args.size == 1) return mknum(1);
+    if (args.size == 1) return SCHEME_TRUE;
     if (!is_number(args.data[0]) || !is_number(args.data[1]))
         die("<=: not a number\n");
     return mknum(args.data[0].atom.number <= args.data[1].atom.number);
@@ -87,7 +94,7 @@ Exp scheme_le(List args)
 Exp scheme_eq(List args)
 {
     if (args.size == 0) die("=: arity mismatch\n");
-    if (args.size == 1) return mknum(1);
+    if (args.size == 1) return SCHEME_TRUE;
     if (!is_number(args.data[0]) || !is_number(args.data[1]))
         die("=: not a number\n");
     return mknum(args.data[0].atom.number == args.data[1].atom.number);
@@ -97,7 +104,7 @@ Exp scheme_not(List args)
 {
     if (args.size != 1) die("not: arity mismatch\n");
     if (!is_number(args.data[0])) {
-        return mknum(0);
+        return SCHEME_FALSE;
     }
     return mknum(args.data[0].atom.number == 0 ? 1 : 0);
 }
@@ -106,7 +113,7 @@ Exp scheme_and(List args)
 {
     for (size_t i = 0; i < args.size; i++) {
         if (is_number(args.data[i]) && args.data[i].atom.number == 0) {
-            return mknum(0);
+            return SCHEME_FALSE;
         }
     }
     return args.data[args.size-1];
@@ -119,14 +126,7 @@ Exp scheme_or(List args)
             return args.data[i];
         }
     }
-    return mknum(0);
-}
-
-Exp scheme_abs(List args)
-{
-    if (args.size != 1) die("=: arity mismatch\n");
-    if (!is_number(args.data[0])) die("=: not a number\n");
-    return mknum(fabs(args.data[0].atom.number));
+    return SCHEME_FALSE;
 }
 
 Exp scheme_begin(List args)
@@ -180,8 +180,8 @@ Exp scheme_length(List args)
 Exp scheme_is_null(List args)
 {
     if (args.size != 1) die("length: arity mismatch\n");
-    return mknum(args.data[0].type != EXP_LIST ? false
-                         : args.data[0].list.size == 0);
+    return args.data[0].type != EXP_LIST ? SCHEME_FALSE
+                                         : mknum(args.data[0].list.size == 0);
 }
 
 Exp scheme_is_eq(List args)

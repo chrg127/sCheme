@@ -71,3 +71,4 @@ void header##_delete(T *arr, TVal elem)             \
 }                                                   \
 
 #endif
+

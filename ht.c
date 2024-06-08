@@ -145,3 +145,4 @@ void ht_add_all(HashTable *from, HashTable *to)
             ht_install(to, entry->key, entry->value);
     }
 }
+

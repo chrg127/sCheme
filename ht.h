@@ -55,3 +55,4 @@ void ht_add_all(HashTable *from, HashTable *to);
     for (Entry *entry = tab->entries; ((size_t) (entry - tab->entries)) < tab->cap; entry++)
 
 #endif
+

@@ -5,7 +5,7 @@ VECTOR_DEFINE_INIT(List, Exp, list)
 VECTOR_DEFINE_ADD(List, Exp, list)
 VECTOR_DEFINE_FREE(List, Exp, list)
 
-char *substr(const char *s, size_t i, size_t j)
+static char *substr(const char *s, size_t i, size_t j)
 {
     char *r = calloc(j - i + 1, sizeof(char));
     memcpy(r, s + i, j - i);
@@ -27,7 +27,7 @@ typedef struct Tokenizer {
 } Tokenizer;
 
 // Parse next token from string inside tokenizer.
-char *next_token(Tokenizer *t)
+static char *next_token(Tokenizer *t)
 {
     t->prev = t->cur;
     while (t->s[t->i] == ' ' || t->s[t->i] == '\n')
@@ -45,11 +45,12 @@ char *next_token(Tokenizer *t)
         && t->s[t->i] != '(' && t->s[t->i] != ')' && t->i < t->len)
         t->i++;
     t->cur = substr(t->s, start, t->i);
-    return t->cur;
+    return t->prev;
 }
 
 // Numbers become numbers; every other token is a symbol.
-Atom atom(char *token) {
+static Atom atom(char *token)
+{
     char *endptr;
     long num = strtol(token, &endptr, 0);
     return endptr == token ? (Atom) { .type = ATOM_SYMBOL, .symbol = token }
@@ -57,14 +58,13 @@ Atom atom(char *token) {
 }
 
 // Read an expression from a sequence of tokens.
-Exp read_from_tokens(Tokenizer *t) {
-    next_token(t);
-    char *token = t->prev;
+static Exp read_from_tokens(Tokenizer *t)
+{
+    char *token = next_token(t);
     if (token == NULL) {
         return (Exp) { .type = EXP_EOF };
     } else if (token[0] == '(') {
-        List list;
-        list_init(&list);
+        List list = VECTOR_INIT();
         while (t->cur != NULL && t->cur[0] != ')') {
             Exp exp = read_from_tokens(t);
             list_add(&list, exp);
@@ -74,7 +74,7 @@ Exp read_from_tokens(Tokenizer *t) {
             exit(1);
         }
         next_token(t); // pop off ')'
-        return (Exp) { .type = EXP_LIST, .list = list };
+        return mklist(list);
     } else if (token[0] == ')') {
         fprintf(stderr, "unexpected ')'\n");
         exit(1);
@@ -84,14 +84,14 @@ Exp read_from_tokens(Tokenizer *t) {
 }
 
 // Read a scheme expression from a string.
-Exp parse(const char *s)
+static Exp parse(const char *s)
 {
     Tokenizer t = { .i = 0, .s = s, .len = strlen(s) };
     next_token(&t);
     return read_from_tokens(&t);
 }
 
-Exp *expdup(Exp exp)
+static Exp *expdup(Exp exp)
 {
     Exp *mem = calloc(1, sizeof(exp));
     memcpy(mem, &exp, sizeof(exp));
@@ -99,36 +99,36 @@ Exp *expdup(Exp exp)
 }
 
 // An environment with some scheme standard procedures.
-Env standard_env()
+static Env standard_env()
 {
     Env env = { .ht = HT_INIT(), .outer = NULL };
-    ht_install(&env.ht, "+",  expdup(mkcproc(scheme_sum)));
-    ht_install(&env.ht, "-",  expdup(mkcproc(scheme_sub)));
-    ht_install(&env.ht, "*",  expdup(mkcproc(scheme_mul)));
-    ht_install(&env.ht, ">",  expdup(mkcproc(scheme_gt)));
-    ht_install(&env.ht, "<",  expdup(mkcproc(scheme_lt)));
-    ht_install(&env.ht, ">=", expdup(mkcproc(scheme_ge)));
-    ht_install(&env.ht, "<=", expdup(mkcproc(scheme_le)));
-    ht_install(&env.ht, "=",  expdup(mkcproc(scheme_eq)));
-    ht_install(&env.ht, "begin", expdup(mkcproc(scheme_begin)));
-    ht_install(&env.ht, "list", expdup(mkcproc(scheme_list)));
-    ht_install(&env.ht, "pi", expdup(mknum(3.14159265358979323846)));
-    ht_install(&env.ht, "cons", expdup(mkcproc(scheme_cons)));
-    ht_install(&env.ht, "car", expdup(mkcproc(scheme_car)));
-    ht_install(&env.ht, "cdr", expdup(mkcproc(scheme_cdr)));
-    ht_install(&env.ht, "length", expdup(mkcproc(scheme_length)));
-    ht_install(&env.ht, "null?", expdup(mkcproc(scheme_is_null)));
-    ht_install(&env.ht, "eq?", expdup(mkcproc(scheme_is_eq)));
-    ht_install(&env.ht, "equal?", expdup(mkcproc(scheme_equal)));
-    ht_install(&env.ht, "not", expdup(mkcproc(scheme_not)));
-    ht_install(&env.ht, "and", expdup(mkcproc(scheme_and)));
-    ht_install(&env.ht, "or", expdup(mkcproc(scheme_or)));
-    ht_install(&env.ht, "append", expdup(mkcproc(scheme_append)));
-    ht_install(&env.ht, "apply", expdup(mkcproc(scheme_apply)));
-    ht_install(&env.ht, "list?", expdup(mkcproc(scheme_is_list)));
-    ht_install(&env.ht, "number?", expdup(mkcproc(scheme_is_number)));
+    ht_install(&env.ht, "+",          expdup(mkcproc(scheme_sum)));
+    ht_install(&env.ht, "-",          expdup(mkcproc(scheme_sub)));
+    ht_install(&env.ht, "*",          expdup(mkcproc(scheme_mul)));
+    ht_install(&env.ht, ">",          expdup(mkcproc(scheme_gt)));
+    ht_install(&env.ht, "<",          expdup(mkcproc(scheme_lt)));
+    ht_install(&env.ht, ">=",         expdup(mkcproc(scheme_ge)));
+    ht_install(&env.ht, "<=",         expdup(mkcproc(scheme_le)));
+    ht_install(&env.ht, "=",          expdup(mkcproc(scheme_eq)));
+    ht_install(&env.ht, "begin",      expdup(mkcproc(scheme_begin)));
+    ht_install(&env.ht, "list",       expdup(mkcproc(scheme_list)));
+    ht_install(&env.ht, "pi",         expdup(mknum(3.14159265358979323846)));
+    ht_install(&env.ht, "cons",       expdup(mkcproc(scheme_cons)));
+    ht_install(&env.ht, "car",        expdup(mkcproc(scheme_car)));
+    ht_install(&env.ht, "cdr",        expdup(mkcproc(scheme_cdr)));
+    ht_install(&env.ht, "length",     expdup(mkcproc(scheme_length)));
+    ht_install(&env.ht, "null?",      expdup(mkcproc(scheme_is_null)));
+    ht_install(&env.ht, "eq?",        expdup(mkcproc(scheme_is_eq)));
+    ht_install(&env.ht, "equal?",     expdup(mkcproc(scheme_equal)));
+    ht_install(&env.ht, "not",        expdup(mkcproc(scheme_not)));
+    ht_install(&env.ht, "and",        expdup(mkcproc(scheme_and)));
+    ht_install(&env.ht, "or",         expdup(mkcproc(scheme_or)));
+    ht_install(&env.ht, "append",     expdup(mkcproc(scheme_append)));
+    ht_install(&env.ht, "apply",      expdup(mkcproc(scheme_apply)));
+    ht_install(&env.ht, "list?",      expdup(mkcproc(scheme_is_list)));
+    ht_install(&env.ht, "number?",    expdup(mkcproc(scheme_is_number)));
     ht_install(&env.ht, "procedure?", expdup(mkcproc(scheme_is_proc)));
-    ht_install(&env.ht, "symbol?", expdup(mkcproc(scheme_is_symbol)));
+    ht_install(&env.ht, "symbol?",    expdup(mkcproc(scheme_is_symbol)));
     return env;
 }
 
@@ -151,7 +151,7 @@ Exp proc_call(Procedure *proc, List args)
     return eval(proc->body, &env);
 }
 
-Exp mkproc(List params, Exp body, Env *env)
+static Exp mkproc(List params, Exp body, Env *env)
 {
     Procedure *p = calloc(1, sizeof(Procedure));
     p->params = params;
@@ -242,7 +242,7 @@ Exp eval(Exp x, Env *env)
         : proc_call(proc.proc, args);
 }
 
-void print(Exp exp)
+static void print(Exp exp)
 {
     switch (exp.type) {
     case EXP_ATOM:
@@ -271,7 +271,7 @@ void print(Exp exp)
 }
 
 // A prompt-read-eval-print loop.
-void repl()
+static void repl()
 {
     Env env = standard_env();
     while (true) {
