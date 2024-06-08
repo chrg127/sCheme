@@ -13,105 +13,134 @@ void die(const char *fmt, ...)
 }
 
 // All scheme procedures that are inside the standard environment.
-Exp scheme_sum(List args)
+Exp scheme_sum(List args, Env *env)
 {
     double sum = 0;
     for (size_t i = 0; i < args.size; i++) {
         if (!is_number(args.data[i])) die("+: not a number\n");
         sum += args.data[i].atom.number;
     }
-    return make_number_exp(sum);
+    return mknum(sum);
 }
 
-Exp scheme_sub(List args)
+Exp scheme_sub(List args, Env *env)
 {
     if (args.size == 0) die("-: arity mismatch\n");
     if (!is_number(args.data[0])) die("-: not a number\n");
     if (args.size == 1) {
-        return make_number_exp(-args.data[0].atom.number);
+        return mknum(-args.data[0].atom.number);
     }
     double sub = args.data[0].atom.number;
     for (size_t i = 1; i < args.size; i++) {
         if (!is_number(args.data[i])) die("-: not a number\n");
         sub -= args.data[i].atom.number;
     }
-    return make_number_exp(sub);
+    return mknum(sub);
 }
 
-Exp scheme_mul(List args)
+Exp scheme_mul(List args, Env *env)
 {
     double mul = 1;
     for (size_t i = 0; i < args.size; i++) {
         if (!is_number(args.data[i])) die("*: not a number\n");
         mul *= args.data[i].atom.number;
     }
-    return make_number_exp(mul);
+    return mknum(mul);
 }
 
-Exp scheme_gt(List args)
+Exp scheme_gt(List args, Env *env)
 {
     if (args.size == 0) die(">: arity mismatch\n");
-    if (args.size == 1) return make_number_exp(1);
+    if (args.size == 1) return mknum(1);
     if (!is_number(args.data[0]) || !is_number(args.data[1]))
         die(">: not a number\n");
-    return make_number_exp(args.data[0].atom.number > args.data[1].atom.number);
+    return mknum(args.data[0].atom.number > args.data[1].atom.number);
 }
 
-Exp scheme_lt(List args)
+Exp scheme_lt(List args, Env *env)
 {
     if (args.size == 0) die("<: arity mismatch\n");
-    if (args.size == 1) return make_number_exp(1);
+    if (args.size == 1) return mknum(1);
     if (!is_number(args.data[0]) || !is_number(args.data[1]))
         die("<: not a number\n");
-    return make_number_exp(args.data[0].atom.number < args.data[1].atom.number);
+    return mknum(args.data[0].atom.number < args.data[1].atom.number);
 }
 
-Exp scheme_ge(List args)
+Exp scheme_ge(List args, Env *env)
 {
     if (args.size == 0) die(">=: arity mismatch\n");
-    if (args.size == 1) return make_number_exp(1);
+    if (args.size == 1) return mknum(1);
     if (!is_number(args.data[0]) || !is_number(args.data[1]))
         die(">=: not a number\n");
-    return make_number_exp(args.data[0].atom.number >= args.data[1].atom.number);
+    return mknum(args.data[0].atom.number >= args.data[1].atom.number);
 }
 
-Exp scheme_le(List args)
+Exp scheme_le(List args, Env *env)
 {
     if (args.size == 0) die("<=: arity mismatch\n");
-    if (args.size == 1) return make_number_exp(1);
+    if (args.size == 1) return mknum(1);
     if (!is_number(args.data[0]) || !is_number(args.data[1]))
         die("<=: not a number\n");
-    return make_number_exp(args.data[0].atom.number <= args.data[1].atom.number);
+    return mknum(args.data[0].atom.number <= args.data[1].atom.number);
 }
 
-Exp scheme_eq(List args)
+Exp scheme_eq(List args, Env *env)
 {
     if (args.size == 0) die("=: arity mismatch\n");
-    if (args.size == 1) return make_number_exp(1);
+    if (args.size == 1) return mknum(1);
     if (!is_number(args.data[0]) || !is_number(args.data[1]))
         die("=: not a number\n");
-    return make_number_exp(args.data[0].atom.number == args.data[1].atom.number);
+    return mknum(args.data[0].atom.number == args.data[1].atom.number);
 }
 
-Exp scheme_abs(List args)
+Exp scheme_not(List args, Env *env)
+{
+    if (args.size != 1) die("not: arity mismatch\n");
+    if (!is_number(args.data[0])) {
+        return mknum(0);
+    }
+    return mknum(args.data[0].atom.number == 0 ? 1 : 0);
+}
+
+Exp scheme_and(List args, Env *env)
+{
+    for (size_t i = 0; i < args.size; i++) {
+        if (is_number(args.data[i]) && args.data[i].atom.number == 0) {
+            return mknum(0);
+        }
+    }
+    return args.data[args.size-1];
+}
+
+Exp scheme_or(List args, Env *env)
+{
+    for (size_t i = 0; i < args.size; i++) {
+        if (!is_number(args.data[i]) || args.data[i].atom.number != 0) {
+            return args.data[i];
+        }
+    }
+    return mknum(0);
+}
+
+Exp scheme_abs(List args, Env *env)
 {
     if (args.size != 1) die("=: arity mismatch\n");
     if (!is_number(args.data[0])) die("=: not a number\n");
-    return make_number_exp(fabs(args.data[0].atom.number));
+    return mknum(fabs(args.data[0].atom.number));
 }
 
-Exp scheme_begin(List args)
+Exp scheme_begin(List args, Env *env)
 {
     if (args.size == 0) die("begin: arity mismatch\n");
     return args.data[args.size-1];
 }
 
-Exp scheme_list(List args)
+Exp scheme_list(List args, Env *env)
 {
     return (Exp) { .type = EXP_LIST, .list = args };
 }
 
-Exp scheme_cons(List args)
+Exp scheme_cons(List args, Env *env)
 {
     if (args.size != 2) die("cons: arity mismatch\n");
     if (args.data[0].type != EXP_LIST) die("cons: second arg must be a list\n");
@@ -123,14 +152,14 @@ Exp scheme_cons(List args)
     return (Exp) { .type = EXP_LIST, .list = res };
 }
 
-Exp scheme_car(List args)
+Exp scheme_car(List args, Env *env)
 {
     if (args.size != 1) die("car: arity mismatch\n");
     if (args.data[0].type != EXP_LIST) die("car: expected list\n");
     return args.data[0].list.data[0];
 }
 
-Exp scheme_cdr(List args)
+Exp scheme_cdr(List args, Env *env)
 {
     if (args.size != 1) die("cdr: arity mismatch\n");
     if (args.data[0].type != EXP_LIST) die("cdr: expected list\n");
@@ -141,22 +170,23 @@ Exp scheme_cdr(List args)
     return mklist(res);
 }
 
-Exp scheme_length(List args)
+Exp scheme_length(List args, Env *env)
 {
     if (args.size != 1) die("length: arity mismatch\n");
     if (args.data[0].type != EXP_LIST) die("length: not a list\n");
-    return make_number_exp(args.data[0].list.size);
+    return mknum(args.data[0].list.size);
 }
 
-Exp scheme_is_null(List args)
+Exp scheme_is_null(List args, Env *env)
 {
     if (args.size != 1) die("length: arity mismatch\n");
-    return make_number_exp(args.data[0].type != EXP_LIST ? false
+    return mknum(args.data[0].type != EXP_LIST ? false
                          : args.data[0].list.size == 0);
 }
 
-// Exp scheme_is_eq(List args)
-// {
+Exp scheme_is_eq(List args, Env *env)
+{
+    return mknum(0);
 //     if (args.size != 2) die("eq?: arity mismatch\n");
 //     if (args.data[0].type != args.data[1].type)
 //         return false;
@@ -176,10 +206,11 @@ Exp scheme_is_null(List args)
 //                        && first.proc.body == second.proc.body
 //                        && first.proc.env  == second.proc.env;
 //     }
-// }
+}
 
-// Exp scheme_equal(List args)
-// {
+Exp scheme_equal(List args, Env *env)
+{
+    return mknum(0);
 //     if (args.size != 2) die("eq?: arity mismatch\n");
 //     if (args.data[0].type != args.data[1].type)
 //         return false;
@@ -199,7 +230,60 @@ Exp scheme_is_null(List args)
 //                        && first.proc.body == second.proc.body
 //                        && first.proc.env  == second.proc.env;
 //     }
-// }
+}
 
-// still missing: append, apply, list?, max, min, not, number?,
-// procedure?, symbol?
+// (append . lst)
+Exp scheme_append(List args, Env *env)
+{
+    List res = VECTOR_INIT();
+    for (size_t i = 0; i < args.size; i++) {
+        if (!is_list(args.data[i])) {
+            die("append: argument #%d is not a list\n", i);
+        }
+        for (size_t j = 0; j < args.data[i].list.size; j++) {
+            list_add(&res, args.data[i].list.data[j]);
+        }
+    }
+    return mklist(res);
+}
+
+// (apply proc lst)
+Exp scheme_apply(List args, Env *env)
+{
+    if (args.size != 2) die("apply: arity mismatch\n");
+    if (args.data[0].type != EXP_C_PROC && args.data[0].type != EXP_PROC) {
+        die("apply: argument #1 must be a procedure\n");
+    }
+    if (args.data[1].type != EXP_LIST) {
+        die("apply: argument #2 must be a list\n");
+    }
+    Exp proc = args.data[0];
+    List proc_args = args.data[1].list;
+    return proc.type == EXP_C_PROC ? proc.cproc(proc_args, env)
+                                   : proc_call(&proc.proc, proc_args);
+}
+
+Exp scheme_is_list(List args, Env *env)
+{
+    if (args.size != 1) die("list?: arity mismatch\n");
+    return mknum(args.data[0].type == EXP_LIST);
+}
+
+Exp scheme_is_number(List args, Env *env)
+{
+    if (args.size != 1) die("number?: arity mismatch\n");
+    return mknum(args.data[0].type == EXP_ATOM && args.data[0].atom.type == ATOM_NUMBER);
+}
+
+Exp scheme_is_proc(List args, Env *env)
+{
+    if (args.size != 1) die("procedure?: arity mismatch\n");
+    return mknum(args.data[0].type == EXP_PROC || args.data[0].type == EXP_C_PROC);
+}
+
+Exp scheme_is_symbol(List args, Env *env)
+{
+    if (args.size != 1) die("symbol?: arity mismatch\n");
+    return mknum(args.data[0].type == EXP_ATOM && args.data[0].atom.type == ATOM_SYMBOL);
+}
+

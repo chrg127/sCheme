@@ -102,23 +102,33 @@ Exp *expdup(Exp exp)
 Env standard_env()
 {
     Env env = { .ht = HT_INIT(), .outer = NULL };
-    ht_install(&env.ht, "+",  expdup(make_cproc_exp(scheme_sum)));
-    ht_install(&env.ht, "-",  expdup(make_cproc_exp(scheme_sub)));
-    ht_install(&env.ht, "*",  expdup(make_cproc_exp(scheme_mul)));
-    ht_install(&env.ht, ">",  expdup(make_cproc_exp(scheme_gt)));
-    ht_install(&env.ht, "<",  expdup(make_cproc_exp(scheme_lt)));
-    ht_install(&env.ht, ">=", expdup(make_cproc_exp(scheme_ge)));
-    ht_install(&env.ht, "<=", expdup(make_cproc_exp(scheme_le)));
-    ht_install(&env.ht, "=",  expdup(make_cproc_exp(scheme_eq)));
-    ht_install(&env.ht, "begin", expdup(make_cproc_exp(scheme_begin)));
-    ht_install(&env.ht, "list", expdup(make_cproc_exp(scheme_list)));
-    ht_install(&env.ht, "pi", expdup(make_number_exp(3.14159265358979323846)));
-    ht_install(&env.ht, "cons", expdup(make_cproc_exp(scheme_cons)));
-    ht_install(&env.ht, "car", expdup(make_cproc_exp(scheme_car)));
-    ht_install(&env.ht, "cdr", expdup(make_cproc_exp(scheme_cdr)));
-    ht_install(&env.ht, "length", expdup(make_cproc_exp(scheme_length)));
-    ht_install(&env.ht, "null?", expdup(make_cproc_exp(scheme_is_null)));
-    // ht_install(&env.ht, "eq?", expdup(make_cproc_exp(scheme_is_eq)));
+    ht_install(&env.ht, "+",  expdup(mkcproc(scheme_sum)));
+    ht_install(&env.ht, "-",  expdup(mkcproc(scheme_sub)));
+    ht_install(&env.ht, "*",  expdup(mkcproc(scheme_mul)));
+    ht_install(&env.ht, ">",  expdup(mkcproc(scheme_gt)));
+    ht_install(&env.ht, "<",  expdup(mkcproc(scheme_lt)));
+    ht_install(&env.ht, ">=", expdup(mkcproc(scheme_ge)));
+    ht_install(&env.ht, "<=", expdup(mkcproc(scheme_le)));
+    ht_install(&env.ht, "=",  expdup(mkcproc(scheme_eq)));
+    ht_install(&env.ht, "begin", expdup(mkcproc(scheme_begin)));
+    ht_install(&env.ht, "list", expdup(mkcproc(scheme_list)));
+    ht_install(&env.ht, "pi", expdup(mknum(3.14159265358979323846)));
+    ht_install(&env.ht, "cons", expdup(mkcproc(scheme_cons)));
+    ht_install(&env.ht, "car", expdup(mkcproc(scheme_car)));
+    ht_install(&env.ht, "cdr", expdup(mkcproc(scheme_cdr)));
+    ht_install(&env.ht, "length", expdup(mkcproc(scheme_length)));
+    ht_install(&env.ht, "null?", expdup(mkcproc(scheme_is_null)));
+    ht_install(&env.ht, "eq?", expdup(mkcproc(scheme_is_eq)));
+    ht_install(&env.ht, "equal?", expdup(mkcproc(scheme_equal)));
+    ht_install(&env.ht, "not", expdup(mkcproc(scheme_not)));
+    ht_install(&env.ht, "and", expdup(mkcproc(scheme_and)));
+    ht_install(&env.ht, "or", expdup(mkcproc(scheme_or)));
+    ht_install(&env.ht, "append", expdup(mkcproc(scheme_append)));
+    ht_install(&env.ht, "apply", expdup(mkcproc(scheme_apply)));
+    ht_install(&env.ht, "list?", expdup(mkcproc(scheme_is_list)));
+    ht_install(&env.ht, "number?", expdup(mkcproc(scheme_is_number)));
+    ht_install(&env.ht, "procedure?", expdup(mkcproc(scheme_is_proc)));
+    ht_install(&env.ht, "symbol?", expdup(mkcproc(scheme_is_symbol)));
     return env;
 }
 
@@ -132,7 +142,7 @@ static inline Env *env_find(Env *env, char *var)
     return env_find(env->outer, var);
 }
 
-static inline Exp proc_call(Procedure *proc, List args)
+Exp proc_call(Procedure *proc, List args)
 {
     Env env = { .ht = HT_INIT(), .outer = proc->env };
     for (size_t i = 0; i < args.size; i++) {
@@ -226,7 +236,7 @@ Exp eval(Exp x, Env *env)
         list_add(&args, eval(x.list.data[i], env));
     }
     return proc.type == EXP_C_PROC
-        ? proc.cproc(args)
+        ? proc.cproc(args, env)
         : proc_call(&proc.proc, args);
 }
 
@@ -281,3 +291,4 @@ int main()
     repl();
     return 0;
 }
+

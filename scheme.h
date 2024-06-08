@@ -8,7 +8,7 @@
 #include "vector.h"
 
 typedef char *Symbol;   // A Scheme Symbol is implemented as a C string
-typedef double Number;     // A Scheme number is implemented as a C int
+typedef double Number;  // A Scheme number is implemented as a C int
 
 // A Scheme Atom is a Symbol or Number
 #define ATOM_SYMBOL 0
@@ -53,7 +53,7 @@ typedef struct Procedure {
 #define EXP_PROC 4
 #define EXP_EOF -1
 
-typedef Exp (*CProc)(List args);
+typedef Exp (*CProc)(List args, Env *env);
 
 struct Exp {
     int type;
@@ -70,15 +70,27 @@ VECTOR_DECLARE_ADD(List, Exp, list);
 VECTOR_DECLARE_FREE(List, Exp, list);
 
 // Some utilities for working with Exp.
-static inline bool is_symbol(Exp exp) { return exp.type == EXP_ATOM && exp.atom.type == ATOM_SYMBOL; }
-static inline bool is_number(Exp exp) { return exp.type == EXP_ATOM && exp.atom.type == ATOM_NUMBER; }
+static inline bool is_symbol(Exp exp)
+{
+    return exp.type == EXP_ATOM && exp.atom.type == ATOM_SYMBOL;
+}
 
-static inline Exp make_number_exp(double n)
+static inline bool is_number(Exp exp)
+{
+    return exp.type == EXP_ATOM && exp.atom.type == ATOM_NUMBER;
+}
+
+static inline bool is_list(Exp exp)
+{
+    return exp.type == EXP_LIST;
+}
+
+static inline Exp mknum(double n)
 {
     return (Exp) { .type = EXP_ATOM, .atom = (Atom) { .type = ATOM_NUMBER, .number = n } };
 }
 
-static inline Exp make_cproc_exp(CProc cproc)
+static inline Exp mkcproc(CProc cproc)
 {
     return (Exp) { .type = EXP_C_PROC, .cproc = cproc };
 }
@@ -88,23 +100,34 @@ static inline Exp mklist(List l)
     return (Exp) { .type = EXP_LIST, .list = l };
 }
 
-Exp scheme_sum(List args);
-Exp scheme_sub(List args);
-Exp scheme_mul(List args);
-Exp scheme_gt(List args);
-Exp scheme_lt(List args);
-Exp scheme_ge(List args);
-Exp scheme_le(List args);
-Exp scheme_eq(List args);
-Exp scheme_abs(List args);
-Exp scheme_begin(List args);
-Exp scheme_list(List args);
-Exp scheme_cons(List args);
-Exp scheme_car(List args);
-Exp scheme_cdr(List args);
-Exp scheme_length(List args);
-Exp scheme_is_null(List args);
-Exp scheme_is_eq(List args);
+Exp scheme_sum(List args, Env *env);
+Exp scheme_sub(List args, Env *env);
+Exp scheme_mul(List args, Env *env);
+Exp scheme_gt(List args, Env *env);
+Exp scheme_lt(List args, Env *env);
+Exp scheme_ge(List args, Env *env);
+Exp scheme_le(List args, Env *env);
+Exp scheme_eq(List args, Env *env);
+Exp scheme_abs(List args, Env *env);
+Exp scheme_begin(List args, Env *env);
+Exp scheme_list(List args, Env *env);
+Exp scheme_cons(List args, Env *env);
+Exp scheme_car(List args, Env *env);
+Exp scheme_cdr(List args, Env *env);
+Exp scheme_length(List args, Env *env);
+Exp scheme_is_null(List args, Env *env);
+Exp scheme_is_eq(List args, Env *env);
+Exp scheme_equal(List args, Env *env);
+Exp scheme_not(List args, Env *env);
+Exp scheme_and(List args, Env *env);
+Exp scheme_or(List args, Env *env);
+Exp scheme_append(List args, Env *env);
+Exp scheme_apply(List args, Env *env);
+Exp scheme_is_list(List args, Env *env);
+Exp scheme_is_number(List args, Env *env);
+Exp scheme_is_proc(List args, Env *env);
+Exp scheme_is_symbol(List args, Env *env);
 
 Exp eval(Exp x, Env *env);
+Exp proc_call(Procedure *proc, List args);
 
