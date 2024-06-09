@@ -1,3 +1,5 @@
+#pragma once
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
@@ -5,7 +7,7 @@
 #include <string.h>
 #include <stdnoreturn.h>
 #include <math.h>
-#include "ht.h"
+#include <stdbool.h>
 #include "vector.h"
 #include "memory.h"
 
@@ -21,11 +23,13 @@ typedef char *Symbol;   // A Scheme Symbol is implemented as a C string
 typedef double Number;  // A Scheme number is implemented as a C int
 
 // A Scheme Atom is a Symbol or Number
-#define ATOM_SYMBOL 0
-#define ATOM_NUMBER 1
+typedef enum AtomType {
+    ATOM_SYMBOL = 0,
+    ATOM_NUMBER = 1,
+} AtomType;
 
 typedef struct Atom {
-    int type;
+    AtomType type;
     union {
         Symbol symbol;
         Number number;
@@ -45,40 +49,50 @@ VECTOR_DECLARE_INIT(List, Exp, list);
 VECTOR_DECLARE_ADD(List, Exp, list);
 VECTOR_DECLARE_FREE(List, Exp, list);
 
-// An environment: a hashtable of ("var": exp) pairs, with an outer Env.
-typedef struct Env {
-    HashTable ht;
-    struct Env *outer;
-} Env;
+// A native C procedure.
+typedef Exp (*CProc)(List args);
+
+// A Scheme expression is either an Atom, a List, a C Procedure,
+// a user-defined Procedure or void
+typedef struct GCObject GCObject;
+
+typedef enum ExpType {
+    EXP_VOID   = 0,
+    EXP_ATOM   = 1,
+    EXP_LIST   = 2,
+    EXP_C_PROC = 3,
+    EXP_PROC   = 4,
+    EXP_EOF    = 5,
+} ExpType;
+
+struct Exp {
+    ExpType type;
+    union {
+        Atom atom;
+        CProc cproc;
+        GCObject *obj;
+    };
+};
+
+typedef struct Env Env;
 
 // A user-defined Scheme procedure
 typedef struct Procedure {
     List params;
-    Exp *body;
+    Exp body;
     Env *env;
 } Procedure;
 
-// A Scheme expression is either an Atom, a List, a C Procedure,
-// a user-defined Procedure or void
-#define EXP_ATOM 0
-#define EXP_LIST 1
-#define EXP_C_PROC 2
-#define EXP_VOID 3
-#define EXP_PROC 4
-#define EXP_EOF -1
-
-typedef Exp (*CProc)(List args);
-
-struct Exp {
-    int type;
+// Lists and user-defined procedure allocate memory, other values do not.
+// Keep these in a separate object to simplify the garbage collector.
+typedef struct GCObject {
     bool marked;
+    struct GCObject *next;
     union {
-        Atom atom;
         List list;
-        CProc cproc;
         Procedure proc;
     };
-};
+} GCObject;
 
 // Some utilities for working with Exp.
 static inline bool is_symbol(Exp exp)
@@ -103,7 +117,11 @@ static inline Exp mknum(double n)
 
 static inline Exp mklist(List l)
 {
-    return (Exp) { .type = EXP_LIST, .list = l };
+    GCObject *obj = ALLOCATE(GCObject, 1);
+    obj->marked = false;
+    obj->next = NULL;
+    obj->list = l;
+    return (Exp) { .type = EXP_LIST, .obj = obj };
 }
 
 static inline Exp mkcproc(CProc cproc)
@@ -111,20 +129,23 @@ static inline Exp mkcproc(CProc cproc)
     return (Exp) { .type = EXP_C_PROC, .cproc = cproc };
 }
 
-static inline Exp mkproc(List params, Exp *body, Env *env)
+static inline Exp mkproc(List params, Exp body, Env *env)
 {
-    return (Exp) {
-        .type = EXP_PROC,
-        .proc = {
-            .params = params,
-            .body = body,
-            .env = env,
-        }
+    GCObject *obj = ALLOCATE(GCObject, 1);
+    obj->marked = false;
+    obj->next = NULL;
+    obj->proc = (Procedure) {
+        .params = params,
+        .body   = body,
+        .env    = env,
     };
+    return (Exp) { .type = EXP_PROC, .obj = obj };
 }
 
 #define SCHEME_TRUE mknum(1)
 #define SCHEME_FALSE mknum(0)
+#define AS_LIST(e) (e).obj->list
+#define AS_PROC(e) (e).obj->proc
 
 Exp scheme_sum(List args);
 Exp scheme_sub(List args);
@@ -153,6 +174,8 @@ Exp scheme_is_list(List args);
 Exp scheme_is_number(List args);
 Exp scheme_is_proc(List args);
 Exp scheme_is_symbol(List args);
+
+Exp scheme_equal2(Exp first, Exp second);
 
 Exp eval(Exp x, Env *env);
 Exp proc_call(Procedure *proc, List args);

@@ -125,7 +125,7 @@ Exp scheme_begin(List args)
 
 Exp scheme_list(List args)
 {
-    return (Exp) { .type = EXP_LIST, .list = args };
+    return mklist(args);
 }
 
 Exp scheme_cons(List args)
@@ -134,17 +134,17 @@ Exp scheme_cons(List args)
     if (args.data[0].type != EXP_LIST) die("cons: second arg must be a list\n");
     List res = VECTOR_INIT();
     list_add(&res, args.data[0]);
-    for (size_t i = 0; i < args.data[1].list.size; i++) {
-        list_add(&res, args.data[1].list.data[i]);
+    for (size_t i = 0; i < AS_LIST(args.data[1]).size; i++) {
+        list_add(&res, AS_LIST(args.data[1]).data[i]);
     }
-    return (Exp) { .type = EXP_LIST, .list = res };
+    return mklist(res);
 }
 
 Exp scheme_car(List args)
 {
     if (args.size != 1) die("car: arity mismatch\n");
     if (args.data[0].type != EXP_LIST) die("car: expected list\n");
-    return args.data[0].list.data[0];
+    return AS_LIST(args.data[0]).data[0];
 }
 
 Exp scheme_cdr(List args)
@@ -152,8 +152,8 @@ Exp scheme_cdr(List args)
     if (args.size != 1) die("cdr: arity mismatch\n");
     if (args.data[0].type != EXP_LIST) die("cdr: expected list\n");
     List res = VECTOR_INIT();
-    for (size_t i = 1; i < args.data[0].list.size; i++) {
-        list_add(&res, args.data[0].list.data[i]);
+    for (size_t i = 1; i < AS_LIST(args.data[0]).size; i++) {
+        list_add(&res, AS_LIST(args.data[0]).data[i]);
     }
     return mklist(res);
 }
@@ -162,14 +162,15 @@ Exp scheme_length(List args)
 {
     if (args.size != 1) die("length: arity mismatch\n");
     if (args.data[0].type != EXP_LIST) die("length: not a list\n");
-    return mknum(args.data[0].list.size);
+    return mknum(AS_LIST(args.data[0]).size);
 }
 
 Exp scheme_is_null(List args)
 {
     if (args.size != 1) die("length: arity mismatch\n");
-    return args.data[0].type != EXP_LIST ? SCHEME_FALSE
-                                         : mknum(args.data[0].list.size == 0);
+    return args.data[0].type != EXP_LIST
+        ? SCHEME_FALSE
+        : mknum(AS_LIST(args.data[0]).size == 0);
 }
 
 Exp scheme_is_eq(List args)
@@ -189,52 +190,46 @@ Exp scheme_is_eq(List args)
         case ATOM_SYMBOL: return mknum(first.atom.symbol == second.atom.symbol);
         }
         break;
-    case EXP_LIST:   return mknum(first.list.data == second.list.data);
+    case EXP_LIST:
+    case EXP_PROC:   return mknum(first.obj == second.obj);
     case EXP_C_PROC: return mknum(first.cproc == second.cproc);
-    case EXP_PROC:   return mknum(first.proc.env == second.proc.env
-                               && first.proc.body == second.proc.body
-                               && first.proc.params.data == second.proc.params.data);
+    case EXP_VOID:   return SCHEME_TRUE;
+    case EXP_EOF:    return SCHEME_TRUE;
     }
     return SCHEME_FALSE;
 }
 
-static Exp _equal(Exp first, Exp second)
+static Exp list_equal(Exp first, Exp second)
 {
-    switch (first.type) {
-    case EXP_ATOM:
-        if (first.atom.type != second.atom.type)
-            return SCHEME_FALSE;
-        switch (first.atom.type) {
-        case ATOM_NUMBER: return mknum(first.atom.number == second.atom.number);
-        case ATOM_SYMBOL: return mknum(first.atom.symbol == second.atom.symbol);
-        }
-        break;
-    case EXP_LIST:
-        if (first.list.size != second.list.size) {
-            return SCHEME_FALSE;
-        }
-        for (size_t i = 0; i < first.list.size; i++) {
-            Exp res = _equal(first.list.data[i], second.list.data[i]);
-            if (res.atom.number == 0) {
-                return SCHEME_FALSE;
-            }
-        }
-        return SCHEME_TRUE;
-    case EXP_C_PROC: return mknum(first.cproc == second.cproc);
-    case EXP_PROC:   return mknum(first.proc.env == second.proc.env
-                               && first.proc.body == second.proc.body
-                               && first.proc.params.data == second.proc.params.data);
+    if (AS_LIST(first).size != AS_LIST(second).size) {
+        return SCHEME_FALSE;
     }
-    return SCHEME_FALSE;
+    for (size_t i = 0; i < AS_LIST(first).size; i++) {
+        Exp res = list_equal(AS_LIST(first).data[i], AS_LIST(second).data[i]);
+        if (res.atom.number == 0) {
+            return SCHEME_FALSE;
+        }
+    }
+    return SCHEME_TRUE;
 }
 
 Exp scheme_equal(List args)
 {
-    if (args.size != 2) die("eq?: arity mismatch\n");
+    if (args.size != 2) die("equal?: arity mismatch\n");
     if (args.data[0].type != args.data[1].type) {
         return SCHEME_FALSE;
     }
-    return _equal(args.data[0], args.data[1]);
+    switch (args.data[0].type) {
+    case EXP_ATOM:
+    case EXP_C_PROC:
+    case EXP_PROC:
+    case EXP_VOID:
+    case EXP_EOF:
+        return scheme_is_eq(args);
+    case EXP_LIST:
+        return list_equal(args.data[0], args.data[1]);
+    }
+    return SCHEME_FALSE;
 }
 
 // (append . lst)
@@ -245,8 +240,8 @@ Exp scheme_append(List args)
         if (!is_list(args.data[i])) {
             die("append: argument #%d is not a list\n", i);
         }
-        for (size_t j = 0; j < args.data[i].list.size; j++) {
-            list_add(&res, args.data[i].list.data[j]);
+        for (size_t j = 0; j < AS_LIST(args.data[i]).size; j++) {
+            list_add(&res, AS_LIST(args.data[i]).data[j]);
         }
     }
     return mklist(res);
@@ -263,9 +258,9 @@ Exp scheme_apply(List args)
         die("apply: argument #2 must be a list\n");
     }
     Exp proc = args.data[0];
-    List proc_args = args.data[1].list;
+    List proc_args = AS_LIST(args.data[1]);
     return proc.type == EXP_C_PROC ? proc.cproc(proc_args)
-                                   : proc_call(&proc.proc, proc_args);
+                                   : proc_call(&AS_PROC(proc), proc_args);
 }
 
 Exp scheme_is_list(List args)

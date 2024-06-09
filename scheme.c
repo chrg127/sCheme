@@ -1,6 +1,13 @@
 #include "scheme.h"
 
 #include <stdarg.h>
+#include "ht.h"
+
+// An environment: a hashtable of ("var": exp) pairs, with an outer Env.
+typedef struct Env {
+    struct HashTable ht;
+    struct Env *outer;
+} Env;
 
 VECTOR_DEFINE_INIT(List, Exp, list)
 VECTOR_DEFINE_ADD(List, Exp, list)
@@ -92,45 +99,37 @@ static Exp parse(const char *s)
     return read_from_tokens(&t);
 }
 
-static Exp *expdup(Exp exp)
-{
-    Exp *mem = ALLOCATE(Exp, 1);
-    memcpy(mem, &exp, sizeof(exp));
-    mem->marked = false;
-    return mem;
-}
-
 // An environment with some scheme standard procedures.
 static Env standard_env()
 {
     Env env = { .ht = HT_INIT_WITH_ALLOCATOR(reallocate), .outer = NULL };
-    ht_install(&env.ht, "+",          expdup(mkcproc(scheme_sum)));
-    ht_install(&env.ht, "-",          expdup(mkcproc(scheme_sub)));
-    ht_install(&env.ht, "*",          expdup(mkcproc(scheme_mul)));
-    ht_install(&env.ht, ">",          expdup(mkcproc(scheme_gt)));
-    ht_install(&env.ht, "<",          expdup(mkcproc(scheme_lt)));
-    ht_install(&env.ht, ">=",         expdup(mkcproc(scheme_ge)));
-    ht_install(&env.ht, "<=",         expdup(mkcproc(scheme_le)));
-    ht_install(&env.ht, "=",          expdup(mkcproc(scheme_eq)));
-    ht_install(&env.ht, "begin",      expdup(mkcproc(scheme_begin)));
-    ht_install(&env.ht, "list",       expdup(mkcproc(scheme_list)));
-    ht_install(&env.ht, "pi",         expdup(mknum(3.14159265358979323846)));
-    ht_install(&env.ht, "cons",       expdup(mkcproc(scheme_cons)));
-    ht_install(&env.ht, "car",        expdup(mkcproc(scheme_car)));
-    ht_install(&env.ht, "cdr",        expdup(mkcproc(scheme_cdr)));
-    ht_install(&env.ht, "length",     expdup(mkcproc(scheme_length)));
-    ht_install(&env.ht, "null?",      expdup(mkcproc(scheme_is_null)));
-    ht_install(&env.ht, "eq?",        expdup(mkcproc(scheme_is_eq)));
-    ht_install(&env.ht, "equal?",     expdup(mkcproc(scheme_equal)));
-    ht_install(&env.ht, "not",        expdup(mkcproc(scheme_not)));
-    ht_install(&env.ht, "and",        expdup(mkcproc(scheme_and)));
-    ht_install(&env.ht, "or",         expdup(mkcproc(scheme_or)));
-    ht_install(&env.ht, "append",     expdup(mkcproc(scheme_append)));
-    ht_install(&env.ht, "apply",      expdup(mkcproc(scheme_apply)));
-    ht_install(&env.ht, "list?",      expdup(mkcproc(scheme_is_list)));
-    ht_install(&env.ht, "number?",    expdup(mkcproc(scheme_is_number)));
-    ht_install(&env.ht, "procedure?", expdup(mkcproc(scheme_is_proc)));
-    ht_install(&env.ht, "symbol?",    expdup(mkcproc(scheme_is_symbol)));
+    ht_install(&env.ht, "+",          mkcproc(scheme_sum));
+    ht_install(&env.ht, "-",          mkcproc(scheme_sub));
+    ht_install(&env.ht, "*",          mkcproc(scheme_mul));
+    ht_install(&env.ht, ">",          mkcproc(scheme_gt));
+    ht_install(&env.ht, "<",          mkcproc(scheme_lt));
+    ht_install(&env.ht, ">=",         mkcproc(scheme_ge));
+    ht_install(&env.ht, "<=",         mkcproc(scheme_le));
+    ht_install(&env.ht, "=",          mkcproc(scheme_eq));
+    ht_install(&env.ht, "begin",      mkcproc(scheme_begin));
+    ht_install(&env.ht, "list",       mkcproc(scheme_list));
+    ht_install(&env.ht, "pi",         mknum(3.14159265358979323846));
+    ht_install(&env.ht, "cons",       mkcproc(scheme_cons));
+    ht_install(&env.ht, "car",        mkcproc(scheme_car));
+    ht_install(&env.ht, "cdr",        mkcproc(scheme_cdr));
+    ht_install(&env.ht, "length",     mkcproc(scheme_length));
+    ht_install(&env.ht, "null?",      mkcproc(scheme_is_null));
+    ht_install(&env.ht, "eq?",        mkcproc(scheme_is_eq));
+    ht_install(&env.ht, "equal?",     mkcproc(scheme_equal));
+    ht_install(&env.ht, "not",        mkcproc(scheme_not));
+    ht_install(&env.ht, "and",        mkcproc(scheme_and));
+    ht_install(&env.ht, "or",         mkcproc(scheme_or));
+    ht_install(&env.ht, "append",     mkcproc(scheme_append));
+    ht_install(&env.ht, "apply",      mkcproc(scheme_apply));
+    ht_install(&env.ht, "list?",      mkcproc(scheme_is_list));
+    ht_install(&env.ht, "number?",    mkcproc(scheme_is_number));
+    ht_install(&env.ht, "procedure?", mkcproc(scheme_is_proc));
+    ht_install(&env.ht, "symbol?",    mkcproc(scheme_is_symbol));
     return env;
 }
 
@@ -149,9 +148,9 @@ Exp proc_call(Procedure *proc, List args)
     Env env = { .ht = HT_INIT_WITH_ALLOCATOR(reallocate), .outer = proc->env };
     gc_set_current_env(&env);
     for (size_t i = 0; i < args.size; i++) {
-        ht_install(&env.ht, proc->params.data[i].atom.symbol, expdup(args.data[i]));
+        ht_install(&env.ht, proc->params.data[i].atom.symbol, args.data[i]);
     }
-    Exp exp = eval(*proc->body, &env);
+    Exp exp = eval(proc->body, &env);
     gc_set_current_env(env.outer);
     return exp;
 }
@@ -167,24 +166,25 @@ Exp eval(Exp x, Env *env)
         if (!e) {
             die("undefined symbol: %s\n", x.atom.symbol);
         }
-        void *value;
+        Exp value;
         bool found = ht_lookup(&e->ht, x.atom.symbol, &value);
         if (!found) {
             die("error: couldn't find %s in env\n", x.atom.symbol);
         }
-        return *((Exp *) value);
+        return value;
     } else if (is_number(x)) {
         // constant number
         return x;
     }
-    Exp op = x.list.data[0];
+    List l = AS_LIST(x);
+    Exp op = l.data[0];
     if (is_symbol(op) && strcmp(op.atom.symbol, "quote") == 0) {
-        return x.list.data[1];
+        return l.data[1];
     } else if (is_symbol(op) && strcmp(op.atom.symbol, "if") == 0) {
         // conditional
-        Exp test        = x.list.data[1];
-        Exp conseq      = x.list.data[2];
-        Exp alt         = x.list.data[3];
+        Exp test        = l.data[1];
+        Exp conseq      = l.data[2];
+        Exp alt         = l.data[3];
         Exp test_result = eval(test, env);
         Exp exp = !is_number(test_result)
                || (is_number(test_result) && test_result.atom.number != 0)
@@ -192,17 +192,17 @@ Exp eval(Exp x, Env *env)
         return eval(exp, env);
     } else if (is_symbol(op) && strcmp(op.atom.symbol, "define") == 0) {
         // definition
-        Exp symbol = x.list.data[1];
-        Exp exp    = x.list.data[2];
+        Exp symbol = l.data[1];
+        Exp exp    = l.data[2];
         if (!is_symbol(symbol)) {
             die("define: bad syntax\n");
         }
-        ht_install(&env->ht, symbol.atom.symbol, expdup(eval(exp, env)));
+        ht_install(&env->ht, symbol.atom.symbol, eval(exp, env));
         return (Exp) { .type = EXP_VOID };
     } else if (is_symbol(op) && strcmp(op.atom.symbol, "set!") == 0) {
         // assignment
-        Exp symbol = x.list.data[1];
-        Exp exp    = x.list.data[2];
+        Exp symbol = l.data[1];
+        Exp exp    = l.data[2];
         if (!is_symbol(symbol)) {
             die("set!: bad syntax\n");
         }
@@ -210,13 +210,13 @@ Exp eval(Exp x, Env *env)
         if (!e) {
             die("undefined symbol: %s\n", symbol.atom.symbol);
         }
-        ht_install(&e->ht, symbol.atom.symbol, expdup(eval(exp, env)));
+        ht_install(&e->ht, symbol.atom.symbol, eval(exp, env));
         return (Exp) { .type = EXP_VOID };
     } else if (is_symbol(op) && strcmp(op.atom.symbol, "lambda") == 0) {
         // procedure
-        Exp params = x.list.data[1];
-        Exp body   = x.list.data[2];
-        return mkproc(params.list, expdup(body), env);
+        Exp params = l.data[1];
+        Exp body   = l.data[2];
+        return mkproc(AS_LIST(params), body, env);
     }
     // procedure call
     Exp proc = eval(op, env);
@@ -224,12 +224,12 @@ Exp eval(Exp x, Env *env)
         die("error: not a procedure\n");
     }
     List args = VECTOR_INIT();
-    for (size_t i = 1; i < x.list.size; i++) {
-        list_add(&args, eval(x.list.data[i], env));
+    for (size_t i = 1; i < l.size; i++) {
+        list_add(&args, eval(l.data[i], env));
     }
     return proc.type == EXP_C_PROC
         ? proc.cproc(args)
-        : proc_call(&proc.proc, args);
+        : proc_call(&AS_PROC(proc), args);
 }
 
 static void print(Exp exp)
@@ -243,19 +243,24 @@ static void print(Exp exp)
         break;
     case EXP_LIST:
         printf("(");
-        for (size_t i = 0; i < exp.list.size; i++) {
-            print(exp.list.data[i]);
-            if (i != exp.list.size-1) {
+        for (size_t i = 0; i < AS_LIST(exp).size; i++) {
+            print(AS_LIST(exp).data[i]);
+            if (i != AS_LIST(exp).size-1) {
                 printf(" ");
             }
         }
         printf(")");
         break;
     case EXP_C_PROC:
-        printf("<built-in C proc>");
+        printf("<#c-procedure>");
+        break;
+    case EXP_PROC:
+        printf("<#procedure>");
         break;
     case EXP_VOID:
-        printf("<void>");
+        printf("<#void>");
+        break;
+    case EXP_EOF:
         break;
     }
 }

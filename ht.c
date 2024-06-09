@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include "scheme.h"
 
 typedef uint32_t u32;
 typedef uint8_t  u8;
@@ -19,32 +20,33 @@ static u32 hash_string(const char *str, size_t len)
     return hash;
 }
 
-// key and value behavior.
-// when changing types for HtKey and HtValue, you only need to
-// modify these functions
+// Key and value behavior.
+// When changing types for HtKey and HtValue, you only need to
+// modify these functions.
+// Key types must have these traits: nullable, hashable and comparable
+// Value types must have these traits: nullable
 
 static inline bool is_empty_key(HtKey v)     { return v == NULL; }
-static inline bool is_empty_value(HtValue v) { return v == NULL; }
-static inline u32 hash(HtValue v)            { return hash_string(v, strlen(v)); }
+static inline u32 hash(HtKey v)              { return hash_string(v, strlen(v)); }
 
-static inline bool value_equal(HtValue a, HtValue b)
+static inline bool key_equal(HtKey a, HtKey b)
 {
-    size_t as = strlen(a);
-    size_t bs = strlen(b);
-    return strncmp(a, b, as < bs ? as : bs) == 0;
+    return strcmp(a, b) == 0;
 }
+
+static inline bool is_empty_value(HtValue v) { return v.type == EXP_VOID; }
 
 // note that empty entries and tombstone entries must both have empty keys
 static inline void make_empty(HtEntry *entry)
 {
     entry->key   = NULL;
-    entry->value = NULL;
+    entry->value = (Exp) { .type = EXP_VOID };
 }
 
 static inline void make_tombstone(HtEntry *entry)
 {
     entry->key   = NULL;
-    entry->value = (void *) 0xdeadbeef;
+    entry->value = (Exp) { .type = 0xdeadbeef };
 }
 
 
@@ -65,7 +67,7 @@ static HtEntry *find_entry(HtEntry *entries, size_t cap, HtKey key)
                 return first_tombstone != NULL ? first_tombstone : ptr;
             else if (first_tombstone == NULL)
                 first_tombstone = ptr;
-        } else if (value_equal(ptr->key, key))
+        } else if (key_equal(ptr->key, key))
             return ptr;
         i = (i + 1) & (cap - 1);
     }

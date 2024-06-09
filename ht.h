@@ -4,12 +4,13 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdlib.h>
+#include "scheme.h"
 
 typedef char *HtKey;
-typedef void *HtValue;
+typedef Exp HtValue;
 typedef void *(*HtAllocator)(void *ptr, size_t old, size_t new);
 
-typedef struct {
+typedef struct HtEntry {
     HtKey key;
     HtValue value;
 } HtEntry;
