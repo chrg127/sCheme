@@ -10,10 +10,12 @@ static struct {
     size_t bytes_allocated;
     size_t next;
     Env *cur_env;
+    GCObject *obj_list;
 } gc = {
     .bytes_allocated = 0,
     .next = 8192,
     .cur_env = NULL,
+    .obj_list = NULL,
 };
 
 void *reallocate(void *ptr, size_t old, size_t new)
@@ -56,5 +58,14 @@ char *mem_strdup(const char *s, size_t size)
     char *dup = reallocate(NULL, 0, size);
     memcpy(dup, s, size);
     return dup;
+}
+
+GCObject *mkobj()
+{
+    GCObject *obj = ALLOCATE(GCObject, 1);
+    obj->marked = false;
+    obj->next = gc.obj_list;
+    gc.obj_list = obj;
+    return obj;
 }
 

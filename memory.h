@@ -3,11 +3,13 @@
 #include <stddef.h>
 
 typedef struct Env Env;
+typedef struct GCObject GCObject;
 
 void *reallocate(void *ptr, size_t old, size_t new);
 void gc_collect();
 void gc_set_current_env(Env *env);
 char *mem_strdup(const char *s, size_t size);
+GCObject *mkobj();
 
 #define ALLOCATE(type, count) \
     (type *) reallocate(NULL, 0, sizeof(type) * (count))

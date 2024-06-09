@@ -1,13 +1,6 @@
-#include "scheme.h"
-
 #include <stdarg.h>
+#include "scheme.h"
 #include "ht.h"
-
-// An environment: a hashtable of ("var": exp) pairs, with an outer Env.
-typedef struct Env {
-    struct HashTable ht;
-    struct Env *outer;
-} Env;
 
 VECTOR_DEFINE_INIT(List, Exp, list)
 VECTOR_DEFINE_ADD(List, Exp, list)
@@ -63,7 +56,8 @@ static Atom atom(Token token)
     char *endptr;
     long num = strtol(token.s + token.start, &endptr, 0);
     return endptr == token.s + token.start
-        ? (Atom) { .type = ATOM_SYMBOL, .symbol = mem_strdup(token.s + token.start, token.end - token.start) }
+        ? (Atom) { .type = ATOM_SYMBOL, .symbol =
+            mem_strdup(token.s + token.start, token.end - token.start) }
         : (Atom) { .type = ATOM_NUMBER, .number = num };
 }
 
@@ -98,6 +92,12 @@ static Exp parse(const char *s)
     next_token(&t);
     return read_from_tokens(&t);
 }
+
+// An environment: a hashtable of ("var": exp) pairs, with an outer Env.
+typedef struct Env {
+    struct HashTable ht;
+    struct Env *outer;
+} Env;
 
 // An environment with some scheme standard procedures.
 static Env standard_env()

@@ -24,8 +24,8 @@ typedef double Number;  // A Scheme number is implemented as a C int
 
 // A Scheme Atom is a Symbol or Number
 typedef enum AtomType {
-    ATOM_SYMBOL = 0,
-    ATOM_NUMBER = 1,
+    ATOM_SYMBOL,
+    ATOM_NUMBER
 } AtomType;
 
 typedef struct Atom {
@@ -49,7 +49,7 @@ VECTOR_DECLARE_INIT(List, Exp, list);
 VECTOR_DECLARE_ADD(List, Exp, list);
 VECTOR_DECLARE_FREE(List, Exp, list);
 
-// A native C procedure.
+// A native C procedure
 typedef Exp (*CProc)(List args);
 
 // A Scheme expression is either an Atom, a List, a C Procedure,
@@ -117,9 +117,7 @@ static inline Exp mknum(double n)
 
 static inline Exp mklist(List l)
 {
-    GCObject *obj = ALLOCATE(GCObject, 1);
-    obj->marked = false;
-    obj->next = NULL;
+    GCObject *obj = mkobj();
     obj->list = l;
     return (Exp) { .type = EXP_LIST, .obj = obj };
 }
@@ -131,14 +129,8 @@ static inline Exp mkcproc(CProc cproc)
 
 static inline Exp mkproc(List params, Exp body, Env *env)
 {
-    GCObject *obj = ALLOCATE(GCObject, 1);
-    obj->marked = false;
-    obj->next = NULL;
-    obj->proc = (Procedure) {
-        .params = params,
-        .body   = body,
-        .env    = env,
-    };
+    GCObject *obj = mkobj();
+    obj->proc = (Procedure) { .params = params, .body = body, .env = env, };
     return (Exp) { .type = EXP_PROC, .obj = obj };
 }
 
@@ -174,8 +166,6 @@ Exp scheme_is_list(List args);
 Exp scheme_is_number(List args);
 Exp scheme_is_proc(List args);
 Exp scheme_is_symbol(List args);
-
-Exp scheme_equal2(Exp first, Exp second);
 
 Exp eval(Exp x, Env *env);
 Exp proc_call(Procedure *proc, List args);
