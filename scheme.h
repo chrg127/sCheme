@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdnoreturn.h>
 #include <math.h>
 #include "ht.h"
 #include "vector.h"
@@ -13,6 +14,8 @@
 
 #undef VECTOR_ARRAY_FREE
 #define VECTOR_ARRAY_FREE FREE_ARRAY
+
+noreturn void die(const char *fmt, ...);
 
 typedef char *Symbol;   // A Scheme Symbol is implemented as a C string
 typedef double Number;  // A Scheme number is implemented as a C int

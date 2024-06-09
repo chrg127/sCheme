@@ -1,16 +1,4 @@
 #include "scheme.h"
-#include "vector.h"
-
-#include <stdarg.h>
-
-void die(const char *fmt, ...)
-{
-    va_list args;
-    va_start(args, fmt);
-    vfprintf(stderr, fmt, args);
-    va_end(args);
-    exit(1);
-}
 
 // All scheme procedures that are inside the standard environment.
 Exp scheme_sum(List args)
@@ -203,7 +191,9 @@ Exp scheme_is_eq(List args)
         break;
     case EXP_LIST:   return mknum(first.list.data == second.list.data);
     case EXP_C_PROC: return mknum(first.cproc == second.cproc);
-    case EXP_PROC:   return mknum(first.proc == second.proc);
+    case EXP_PROC:   return mknum(first.proc.env == second.proc.env
+                               && first.proc.body == second.proc.body
+                               && first.proc.params.data == second.proc.params.data);
     }
     return SCHEME_FALSE;
 }
@@ -231,7 +221,9 @@ static Exp _equal(Exp first, Exp second)
         }
         return SCHEME_TRUE;
     case EXP_C_PROC: return mknum(first.cproc == second.cproc);
-    case EXP_PROC:   return mknum(first.proc == second.proc);
+    case EXP_PROC:   return mknum(first.proc.env == second.proc.env
+                               && first.proc.body == second.proc.body
+                               && first.proc.params.data == second.proc.params.data);
     }
     return SCHEME_FALSE;
 }
@@ -273,7 +265,7 @@ Exp scheme_apply(List args)
     Exp proc = args.data[0];
     List proc_args = args.data[1].list;
     return proc.type == EXP_C_PROC ? proc.cproc(proc_args)
-                                   : proc_call(proc.proc, proc_args);
+                                   : proc_call(&proc.proc, proc_args);
 }
 
 Exp scheme_is_list(List args)

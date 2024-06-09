@@ -1,10 +1,19 @@
 #include "scheme.h"
-#include "ht.h"
-#include "memory.h"
+
+#include <stdarg.h>
 
 VECTOR_DEFINE_INIT(List, Exp, list)
 VECTOR_DEFINE_ADD(List, Exp, list)
 VECTOR_DEFINE_FREE(List, Exp, list)
+
+noreturn void die(const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    vfprintf(stderr, fmt, args);
+    va_end(args);
+    exit(1);
+}
 
 typedef struct Token {
     const char *s;
@@ -64,14 +73,12 @@ static Exp read_from_tokens(Tokenizer *t)
             list_add(&list, exp);
         }
         if (t->cur.s == NULL) {
-            fprintf(stderr, "error: unexpected EOF\n");
-            exit(1);
+            die("error: unexpected EOF\n");
         }
         next_token(t); // pop off ')'
         return mklist(list);
     } else if (token.s[token.start] == ')') {
-        fprintf(stderr, "unexpected ')'\n");
-        exit(1);
+        die("unexpected ')'\n");
     } else {
         return (Exp) { .type = EXP_ATOM, .atom = atom(token) };
     }
@@ -144,7 +151,7 @@ Exp proc_call(Procedure *proc, List args)
     for (size_t i = 0; i < args.size; i++) {
         ht_install(&env.ht, proc->params.data[i].atom.symbol, expdup(args.data[i]));
     }
-    Exp exp = eval(proc->body, &env);
+    Exp exp = eval(*proc->body, &env);
     gc_set_current_env(env.outer);
     return exp;
 }
@@ -158,14 +165,12 @@ Exp eval(Exp x, Env *env)
         // variable reference
         Env *e = env_find(env, x.atom.symbol);
         if (!e) {
-            fprintf(stderr, "undefined symbol: %s\n", x.atom.symbol);
-            exit(1);
+            die("undefined symbol: %s\n", x.atom.symbol);
         }
         void *value;
         bool found = ht_lookup(&e->ht, x.atom.symbol, &value);
         if (!found) {
-            fprintf(stderr, "error: couldn't find %s in env\n", x.atom.symbol);
-            exit(1);
+            die("error: couldn't find %s in env\n", x.atom.symbol);
         }
         return *((Exp *) value);
     } else if (is_number(x)) {
@@ -190,8 +195,7 @@ Exp eval(Exp x, Env *env)
         Exp symbol = x.list.data[1];
         Exp exp    = x.list.data[2];
         if (!is_symbol(symbol)) {
-            fprintf(stderr, "define: bad syntax\n");
-            exit(1);
+            die("define: bad syntax\n");
         }
         ht_install(&env->ht, symbol.atom.symbol, expdup(eval(exp, env)));
         return (Exp) { .type = EXP_VOID };
@@ -200,13 +204,11 @@ Exp eval(Exp x, Env *env)
         Exp symbol = x.list.data[1];
         Exp exp    = x.list.data[2];
         if (!is_symbol(symbol)) {
-            fprintf(stderr, "set!: bad syntax\n");
-            exit(1);
+            die("set!: bad syntax\n");
         }
         Env *e = env_find(env, symbol.atom.symbol);
         if (!e) {
-            fprintf(stderr, "undefined symbol: %s\n", symbol.atom.symbol);
-            exit(1);
+            die("undefined symbol: %s\n", symbol.atom.symbol);
         }
         ht_install(&e->ht, symbol.atom.symbol, expdup(eval(exp, env)));
         return (Exp) { .type = EXP_VOID };
@@ -219,8 +221,7 @@ Exp eval(Exp x, Env *env)
     // procedure call
     Exp proc = eval(op, env);
     if (proc.type != EXP_C_PROC && proc.type != EXP_PROC) {
-        fprintf(stderr, "error: not a procedure\n");
-        exit(1);
+        die("error: not a procedure\n");
     }
     List args = VECTOR_INIT();
     for (size_t i = 1; i < x.list.size; i++) {
@@ -228,7 +229,7 @@ Exp eval(Exp x, Env *env)
     }
     return proc.type == EXP_C_PROC
         ? proc.cproc(args)
-        : proc_call(proc.proc, args);
+        : proc_call(&proc.proc, args);
 }
 
 static void print(Exp exp)
