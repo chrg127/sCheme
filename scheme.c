@@ -93,11 +93,12 @@ static Exp parse(const char *s)
     return read_from_tokens(&t);
 }
 
-// An environment: a hashtable of ("var": exp) pairs, with an outer Env.
-typedef struct Env {
-    struct HashTable ht;
-    struct Env *outer;
-} Env;
+Env *envdup(Env *e)
+{
+    Env *new_env = ALLOCATE(Env, 1);
+    memcpy(new_env, env, sizeof(Env));
+    return new_env;
+}
 
 // An environment with some scheme standard procedures.
 static Env standard_env()
@@ -216,7 +217,7 @@ Exp eval(Exp x, Env *env)
         // procedure
         Exp params = l.data[1];
         Exp body   = l.data[2];
-        return mkproc(AS_LIST(params), body, env);
+        return mkproc(AS_LIST(params), body, envdup(env));
     }
     // procedure call
     Exp proc = eval(op, env);
