@@ -1,6 +1,7 @@
 #include <stdarg.h>
 #include "scheme.h"
 #include "ht.h"
+#include "env.h"
 
 VECTOR_DEFINE_INIT(List, Exp, list)
 VECTOR_DEFINE_ADD(List, Exp, list)
@@ -51,14 +52,13 @@ static Token next_token(Tokenizer *t)
 }
 
 // Numbers become numbers; every other token is a symbol.
-static Atom atom(Token token)
+static Exp atom(Token token)
 {
     char *endptr;
     long num = strtol(token.s + token.start, &endptr, 0);
     return endptr == token.s + token.start
-        ? (Atom) { .type = ATOM_SYMBOL, .symbol =
-            mem_strdup(token.s + token.start, token.end - token.start) }
-        : (Atom) { .type = ATOM_NUMBER, .number = num };
+        ? mksym(mem_strdup(token.s + token.start, token.end - token.start))
+        : mknum(num);
 }
 
 // Read an expression from a sequence of tokens.
@@ -81,7 +81,7 @@ static Exp read_from_tokens(Tokenizer *t)
     } else if (token.s[token.start] == ')') {
         die("unexpected ')'\n");
     } else {
-        return (Exp) { .type = EXP_ATOM, .atom = atom(token) };
+        return atom(token);
     }
 }
 
@@ -96,7 +96,7 @@ static Exp parse(const char *s)
 Env *envdup(Env *e)
 {
     Env *new_env = ALLOCATE(Env, 1);
-    memcpy(new_env, env, sizeof(Env));
+    memcpy(new_env, e, sizeof(Env));
     return new_env;
 }
 
@@ -149,7 +149,7 @@ Exp proc_call(Procedure *proc, List args)
     Env env = { .ht = HT_INIT_WITH_ALLOCATOR(reallocate), .outer = proc->env };
     gc_set_current_env(&env);
     for (size_t i = 0; i < args.size; i++) {
-        ht_install(&env.ht, proc->params.data[i].atom.symbol, args.data[i]);
+        ht_install(&env.ht, AS_SYM(proc->params.data[i]), args.data[i]);
     }
     Exp exp = eval(proc->body, &env);
     gc_set_current_env(env.outer);
@@ -162,15 +162,16 @@ Exp eval(Exp x, Env *env)
     if (x.type == EXP_EOF) {
         return x;
     } else if (is_symbol(x)) {
+        Symbol s = AS_SYM(x);
         // variable reference
-        Env *e = env_find(env, x.atom.symbol);
+        Env *e = env_find(env, s);
         if (!e) {
-            die("undefined symbol: %s\n", x.atom.symbol);
+            die("undefined symbol: %s\n", s);
         }
         Exp value;
-        bool found = ht_lookup(&e->ht, x.atom.symbol, &value);
+        bool found = ht_lookup(&e->ht, AS_SYM(x), &value);
         if (!found) {
-            die("error: couldn't find %s in env\n", x.atom.symbol);
+            die("error: couldn't find %s in env\n", s);
         }
         return value;
     } else if (is_number(x)) {
@@ -179,41 +180,41 @@ Exp eval(Exp x, Env *env)
     }
     List l = AS_LIST(x);
     Exp op = l.data[0];
-    if (is_symbol(op) && strcmp(op.atom.symbol, "quote") == 0) {
+    if (is_symbol(op) && strcmp(AS_SYM(op), "quote") == 0) {
         return l.data[1];
-    } else if (is_symbol(op) && strcmp(op.atom.symbol, "if") == 0) {
+    } else if (is_symbol(op) && strcmp(AS_SYM(op), "if") == 0) {
         // conditional
         Exp test        = l.data[1];
         Exp conseq      = l.data[2];
         Exp alt         = l.data[3];
         Exp test_result = eval(test, env);
         Exp exp = !is_number(test_result)
-               || (is_number(test_result) && test_result.atom.number != 0)
+               || (is_number(test_result) && test_result.number != 0)
                ? conseq : alt;
         return eval(exp, env);
-    } else if (is_symbol(op) && strcmp(op.atom.symbol, "define") == 0) {
+    } else if (is_symbol(op) && strcmp(AS_SYM(op), "define") == 0) {
         // definition
-        Exp symbol = l.data[1];
-        Exp exp    = l.data[2];
-        if (!is_symbol(symbol)) {
+        if (!is_symbol(l.data[1])) {
             die("define: bad syntax\n");
         }
-        ht_install(&env->ht, symbol.atom.symbol, eval(exp, env));
+        Symbol symbol = AS_SYM(l.data[1]);
+        Exp exp = l.data[2];
+        ht_install(&env->ht, symbol, eval(exp, env));
         return (Exp) { .type = EXP_VOID };
-    } else if (is_symbol(op) && strcmp(op.atom.symbol, "set!") == 0) {
+    } else if (is_symbol(op) && strcmp(AS_SYM(op), "set!") == 0) {
         // assignment
-        Exp symbol = l.data[1];
-        Exp exp    = l.data[2];
-        if (!is_symbol(symbol)) {
+        if (!is_symbol(l.data[1])) {
             die("set!: bad syntax\n");
         }
-        Env *e = env_find(env, symbol.atom.symbol);
+        Symbol symbol = AS_SYM(l.data[1]);
+        Exp exp = l.data[2];
+        Env *e = env_find(env, symbol);
         if (!e) {
-            die("undefined symbol: %s\n", symbol.atom.symbol);
+            die("undefined symbol: %s\n", symbol);
         }
-        ht_install(&e->ht, symbol.atom.symbol, eval(exp, env));
+        ht_install(&e->ht, symbol, eval(exp, env));
         return (Exp) { .type = EXP_VOID };
-    } else if (is_symbol(op) && strcmp(op.atom.symbol, "lambda") == 0) {
+    } else if (is_symbol(op) && strcmp(AS_SYM(op), "lambda") == 0) {
         // procedure
         Exp params = l.data[1];
         Exp body   = l.data[2];
@@ -236,12 +237,9 @@ Exp eval(Exp x, Env *env)
 static void print(Exp exp)
 {
     switch (exp.type) {
-    case EXP_ATOM:
-        switch (exp.atom.type) {
-        case ATOM_SYMBOL: printf("%s", exp.atom.symbol); break;
-        case ATOM_NUMBER: printf("%g", exp.atom.number); break;
-        }
-        break;
+    case EXP_EMPTY: break;
+    case EXP_SYMBOL: printf("%s", AS_SYM(exp)); break;
+    case EXP_NUMBER: printf("%g", exp.number); break;
     case EXP_LIST:
         printf("(");
         for (size_t i = 0; i < AS_LIST(exp).size; i++) {

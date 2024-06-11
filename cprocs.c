@@ -6,7 +6,7 @@ Exp scheme_sum(List args)
     double sum = 0;
     for (size_t i = 0; i < args.size; i++) {
         if (!is_number(args.data[i])) die("+: not a number\n");
-        sum += args.data[i].atom.number;
+        sum += args.data[i].number;
     }
     return mknum(sum);
 }
@@ -16,12 +16,12 @@ Exp scheme_sub(List args)
     if (args.size == 0) die("-: arity mismatch\n");
     if (!is_number(args.data[0])) die("-: not a number\n");
     if (args.size == 1) {
-        return mknum(-args.data[0].atom.number);
+        return mknum(-args.data[0].number);
     }
-    double sub = args.data[0].atom.number;
+    double sub = args.data[0].number;
     for (size_t i = 1; i < args.size; i++) {
         if (!is_number(args.data[i])) die("-: not a number\n");
-        sub -= args.data[i].atom.number;
+        sub -= args.data[i].number;
     }
     return mknum(sub);
 }
@@ -31,7 +31,7 @@ Exp scheme_mul(List args)
     double mul = 1;
     for (size_t i = 0; i < args.size; i++) {
         if (!is_number(args.data[i])) die("*: not a number\n");
-        mul *= args.data[i].atom.number;
+        mul *= args.data[i].number;
     }
     return mknum(mul);
 }
@@ -40,7 +40,7 @@ Exp scheme_abs(List args)
 {
     if (args.size != 1) die("=: arity mismatch\n");
     if (!is_number(args.data[0])) die("=: not a number\n");
-    return mknum(fabs(args.data[0].atom.number));
+    return mknum(fabs(args.data[0].number));
 }
 
 Exp scheme_gt(List args)
@@ -49,7 +49,7 @@ Exp scheme_gt(List args)
     if (args.size == 1) return SCHEME_TRUE;
     if (!is_number(args.data[0]) || !is_number(args.data[1]))
         die(">: not a number\n");
-    return mknum(args.data[0].atom.number > args.data[1].atom.number);
+    return mknum(args.data[0].number > args.data[1].number);
 }
 
 Exp scheme_lt(List args)
@@ -58,7 +58,7 @@ Exp scheme_lt(List args)
     if (args.size == 1) return SCHEME_TRUE;
     if (!is_number(args.data[0]) || !is_number(args.data[1]))
         die("<: not a number\n");
-    return mknum(args.data[0].atom.number < args.data[1].atom.number);
+    return mknum(args.data[0].number < args.data[1].number);
 }
 
 Exp scheme_ge(List args)
@@ -67,7 +67,7 @@ Exp scheme_ge(List args)
     if (args.size == 1) return SCHEME_TRUE;
     if (!is_number(args.data[0]) || !is_number(args.data[1]))
         die(">=: not a number\n");
-    return mknum(args.data[0].atom.number >= args.data[1].atom.number);
+    return mknum(args.data[0].number >= args.data[1].number);
 }
 
 Exp scheme_le(List args)
@@ -76,7 +76,7 @@ Exp scheme_le(List args)
     if (args.size == 1) return SCHEME_TRUE;
     if (!is_number(args.data[0]) || !is_number(args.data[1]))
         die("<=: not a number\n");
-    return mknum(args.data[0].atom.number <= args.data[1].atom.number);
+    return mknum(args.data[0].number <= args.data[1].number);
 }
 
 Exp scheme_eq(List args)
@@ -85,7 +85,7 @@ Exp scheme_eq(List args)
     if (args.size == 1) return SCHEME_TRUE;
     if (!is_number(args.data[0]) || !is_number(args.data[1]))
         die("=: not a number\n");
-    return mknum(args.data[0].atom.number == args.data[1].atom.number);
+    return mknum(args.data[0].number == args.data[1].number);
 }
 
 Exp scheme_not(List args)
@@ -94,13 +94,13 @@ Exp scheme_not(List args)
     if (!is_number(args.data[0])) {
         return SCHEME_FALSE;
     }
-    return mknum(args.data[0].atom.number == 0 ? 1 : 0);
+    return mknum(args.data[0].number == 0 ? 1 : 0);
 }
 
 Exp scheme_and(List args)
 {
     for (size_t i = 0; i < args.size; i++) {
-        if (is_number(args.data[i]) && args.data[i].atom.number == 0) {
+        if (is_number(args.data[i]) && args.data[i].number == 0) {
             return SCHEME_FALSE;
         }
     }
@@ -110,7 +110,7 @@ Exp scheme_and(List args)
 Exp scheme_or(List args)
 {
     for (size_t i = 0; i < args.size; i++) {
-        if (!is_number(args.data[i]) || args.data[i].atom.number != 0) {
+        if (!is_number(args.data[i]) || args.data[i].number != 0) {
             return args.data[i];
         }
     }
@@ -181,15 +181,9 @@ Exp scheme_is_eq(List args)
     }
     Exp first = args.data[0], second = args.data[1];
     switch (first.type) {
-    case EXP_ATOM:
-        if (first.atom.type != second.atom.type) {
-            return SCHEME_FALSE;
-        }
-        switch (first.atom.type) {
-        case ATOM_NUMBER: return mknum(first.atom.number == second.atom.number);
-        case ATOM_SYMBOL: return mknum(first.atom.symbol == second.atom.symbol);
-        }
-        break;
+    case EXP_EMPTY:  return SCHEME_TRUE;
+    case EXP_NUMBER: return mknum(first.number == second.number);
+    case EXP_SYMBOL:
     case EXP_LIST:
     case EXP_PROC:   return mknum(first.obj == second.obj);
     case EXP_C_PROC: return mknum(first.cproc == second.cproc);
@@ -206,7 +200,7 @@ static Exp list_equal(Exp first, Exp second)
     }
     for (size_t i = 0; i < AS_LIST(first).size; i++) {
         Exp res = list_equal(AS_LIST(first).data[i], AS_LIST(second).data[i]);
-        if (res.atom.number == 0) {
+        if (res.number == 0) {
             return SCHEME_FALSE;
         }
     }
@@ -220,12 +214,15 @@ Exp scheme_equal(List args)
         return SCHEME_FALSE;
     }
     switch (args.data[0].type) {
-    case EXP_ATOM:
+    case EXP_EMPTY:
+    case EXP_NUMBER:
     case EXP_C_PROC:
     case EXP_PROC:
     case EXP_VOID:
     case EXP_EOF:
         return scheme_is_eq(args);
+    case EXP_SYMBOL:
+        return mknum(strcmp(AS_SYM(args.data[0]), AS_SYM(args.data[1])) == 0);
     case EXP_LIST:
         return list_equal(args.data[0], args.data[1]);
     }
@@ -272,7 +269,7 @@ Exp scheme_is_list(List args)
 Exp scheme_is_number(List args)
 {
     if (args.size != 1) die("number?: arity mismatch\n");
-    return mknum(args.data[0].type == EXP_ATOM && args.data[0].atom.type == ATOM_NUMBER);
+    return mknum(is_number(args.data[0]));
 }
 
 Exp scheme_is_proc(List args)
@@ -284,6 +281,6 @@ Exp scheme_is_proc(List args)
 Exp scheme_is_symbol(List args)
 {
     if (args.size != 1) die("symbol?: arity mismatch\n");
-    return mknum(args.data[0].type == EXP_ATOM && args.data[0].atom.type == ATOM_SYMBOL);
+    return mknum(is_symbol(args.data[0]));
 }
 

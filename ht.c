@@ -34,13 +34,13 @@ static inline bool key_equal(HtKey a, HtKey b)
     return strcmp(a, b) == 0;
 }
 
-static inline bool is_empty_value(HtValue v) { return v.type == EXP_VOID; }
+static inline bool is_empty_value(HtValue v) { return v.type == EXP_EMPTY; }
 
 // note that empty entries and tombstone entries must both have empty keys
 static inline void make_empty(HtEntry *entry)
 {
     entry->key   = NULL;
-    entry->value = (Exp) { .type = EXP_VOID };
+    entry->value = (Exp) { .type = EXP_EMPTY };
 }
 
 static inline void make_tombstone(HtEntry *entry)

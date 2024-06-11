@@ -1,5 +1,6 @@
 #pragma once
 
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
@@ -23,18 +24,8 @@ typedef char *Symbol;   // A Scheme Symbol is implemented as a C string
 typedef double Number;  // A Scheme number is implemented as a C int
 
 // A Scheme Atom is a Symbol or Number
-typedef enum AtomType {
-    ATOM_SYMBOL,
-    ATOM_NUMBER
-} AtomType;
-
-typedef struct Atom {
-    AtomType type;
-    union {
-        Symbol symbol;
-        Number number;
-    };
-} Atom;
+// ... But we won't create an Atom struct, and will embed both Symbol and
+// Number directly into Exp, for reasons explained below.
 
 typedef struct Exp Exp;
 
@@ -57,18 +48,20 @@ typedef Exp (*CProc)(List args);
 typedef struct GCObject GCObject;
 
 typedef enum ExpType {
-    EXP_VOID   = 0,
-    EXP_ATOM   = 1,
-    EXP_LIST   = 2,
-    EXP_C_PROC = 3,
-    EXP_PROC   = 4,
-    EXP_EOF    = 5,
+    EXP_EMPTY = 0,
+    EXP_VOID,
+    EXP_NUMBER,
+    EXP_SYMBOL,
+    EXP_LIST,
+    EXP_C_PROC,
+    EXP_PROC,
+    EXP_EOF,
 } ExpType;
 
 struct Exp {
     ExpType type;
     union {
-        Atom atom;
+        Number number;
         CProc cproc;
         GCObject *obj;
     };
@@ -83,36 +76,34 @@ typedef struct Procedure {
     Env *env;
 } Procedure;
 
-// Lists and user-defined procedure allocate memory, other values do not.
-// Keep these in a separate object to simplify the garbage collector.
+// Lists, Symbols and user-defined procedure allocate memory.
+// Other values do not. Keep the former in a separate object to simplify
+// the garbage collector.
 typedef struct GCObject {
     bool marked;
     struct GCObject *next;
     union {
+        Symbol symbol;
         List list;
         Procedure proc;
     };
 } GCObject;
 
 // Some utilities for working with Exp.
-static inline bool is_symbol(Exp exp)
-{
-    return exp.type == EXP_ATOM && exp.atom.type == ATOM_SYMBOL;
-}
+static inline bool is_symbol(Exp exp) { return exp.type == EXP_SYMBOL; }
+static inline bool is_number(Exp exp) { return exp.type == EXP_NUMBER; }
+static inline bool is_list(Exp exp)   { return exp.type == EXP_LIST; }
 
-static inline bool is_number(Exp exp)
+static inline Exp mksym(Symbol s)
 {
-    return exp.type == EXP_ATOM && exp.atom.type == ATOM_NUMBER;
-}
-
-static inline bool is_list(Exp exp)
-{
-    return exp.type == EXP_LIST;
+    GCObject *obj = mkobj();
+    obj->symbol = s;
+    return (Exp) { .type = EXP_SYMBOL, .obj = obj };
 }
 
 static inline Exp mknum(double n)
 {
-    return (Exp) { .type = EXP_ATOM, .atom = (Atom) { .type = ATOM_NUMBER, .number = n } };
+    return (Exp) { .type = EXP_NUMBER, .number = n };
 }
 
 static inline Exp mklist(List l)
@@ -138,6 +129,7 @@ static inline Exp mkproc(List params, Exp body, Env *env)
 #define SCHEME_FALSE mknum(0)
 #define AS_LIST(e) (e).obj->list
 #define AS_PROC(e) (e).obj->proc
+#define AS_SYM(e) (e).obj->symbol
 
 Exp scheme_sum(List args);
 Exp scheme_sub(List args);

@@ -74,7 +74,7 @@ bool ht_delete(HashTable *tab, HtKey key);
 void ht_add_all(HashTable *from, HashTable *to);
 
 #define HT_FOR_EACH(tab, entry) \
-    for (HtEntry *entry = (tab)->entries; ((size_t) (entry - (tab)->entries)) < (tab)->cap; entry++)
+    for (HtEntry *entry = (tab).entries; ((size_t) (entry - (tab).entries)) < (tab).cap; entry++)
 
 #endif
 
