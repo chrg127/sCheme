@@ -80,13 +80,14 @@ typedef struct Procedure {
 // Other values do not. Keep the former in a separate object to simplify
 // the garbage collector.
 typedef struct GCObject {
-    bool marked;
-    struct GCObject *next;
+    ExpType type;
     union {
         Symbol symbol;
         List list;
         Procedure proc;
     };
+    bool marked;
+    struct GCObject *next;
 } GCObject;
 
 // Some utilities for working with Exp.
@@ -94,11 +95,14 @@ static inline bool is_symbol(Exp exp) { return exp.type == EXP_SYMBOL; }
 static inline bool is_number(Exp exp) { return exp.type == EXP_NUMBER; }
 static inline bool is_list(Exp exp)   { return exp.type == EXP_LIST; }
 
+static inline Exp mkobj(GCObject from)
+{
+    return (Exp) { .type = from.type, .obj = alloc_obj(from) };
+}
+
 static inline Exp mksym(Symbol s)
 {
-    GCObject *obj = mkobj();
-    obj->symbol = s;
-    return (Exp) { .type = EXP_SYMBOL, .obj = obj };
+    return mkobj((GCObject) { .type = EXP_SYMBOL, .symbol = s });
 }
 
 static inline Exp mknum(double n)
@@ -108,9 +112,7 @@ static inline Exp mknum(double n)
 
 static inline Exp mklist(List l)
 {
-    GCObject *obj = mkobj();
-    obj->list = l;
-    return (Exp) { .type = EXP_LIST, .obj = obj };
+    return mkobj((GCObject) { .type = EXP_LIST, .list = l });
 }
 
 static inline Exp mkcproc(CProc cproc)
@@ -120,9 +122,10 @@ static inline Exp mkcproc(CProc cproc)
 
 static inline Exp mkproc(List params, Exp body, Env *env)
 {
-    GCObject *obj = mkobj();
-    obj->proc = (Procedure) { .params = params, .body = body, .env = env, };
-    return (Exp) { .type = EXP_PROC, .obj = obj };
+    return mkobj((GCObject) {
+        .type = EXP_PROC,
+        .proc = (Procedure) { .params = params, .body = body, .env = env, }
+    });
 }
 
 #define SCHEME_TRUE mknum(1)

@@ -1,4 +1,5 @@
 #include <stdarg.h>
+#include "memory.h"
 #include "scheme.h"
 #include "ht.h"
 #include "env.h"
@@ -225,13 +226,15 @@ Exp eval(Exp x, Env *env)
     if (proc.type != EXP_C_PROC && proc.type != EXP_PROC) {
         die("error: not a procedure\n");
     }
-    List args = VECTOR_INIT();
+    // wrap new list in an object. this is to make sure it will be found
+    // by the garbage collector.
+    Exp args = mklist((List) VECTOR_INIT());
     for (size_t i = 1; i < l.size; i++) {
-        list_add(&args, eval(l.data[i], env));
+        list_add(&AS_LIST(args), eval(l.data[i], env));
     }
     return proc.type == EXP_C_PROC
-        ? proc.cproc(args)
-        : proc_call(&AS_PROC(proc), args);
+        ? proc.cproc(AS_LIST(args))
+        : proc_call(&AS_PROC(proc), AS_LIST(args));
 }
 
 static void print(Exp exp)
@@ -284,6 +287,7 @@ static void repl()
         }
         print(val);
         printf("\n");
+        gc_collect();
     }
 }
 

@@ -4,5 +4,8 @@
 typedef struct Env {
     struct HashTable ht;
     struct Env *outer;
+    // for gc:
+    bool marked;
+    struct Env *next;
 } Env;
 
