@@ -1,4 +1,5 @@
 #include "scheme.h"
+#include "gcobject.h"
 
 // All scheme procedures that are inside the standard environment.
 Exp scheme_sum(List args)

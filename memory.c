@@ -5,18 +5,8 @@
 #include <string.h>
 #include "ht.h"
 #include "scheme.h"
-#include "env.h"
+#include "gcobject.h"
 #include "vector.h"
-
-// typedef struct Graystack {
-//     GCObject **data;
-//     size_t size;
-//     size_t cap;
-// } Graystack;
-
-// VECTOR_DEFINE_INIT(Graystack, GCObject *, graystack)
-// VECTOR_DEFINE_ADD(Graystack, GCObject *, graystack)
-// VECTOR_DEFINE_FREE(Graystack, GCObject *, graystack)
 
 static struct {
     size_t bytes_allocated;
@@ -24,72 +14,62 @@ static struct {
     Env *cur_env;
     GCObject *obj_list;
     Env *env_list;
-    // Graystack graystack;
 } gc = {
     .bytes_allocated = 0,
     .next = 8192,
     .cur_env = NULL,
     .obj_list = NULL,
     .env_list = NULL,
-    // .graystack = VECTOR_INIT()
 };
 
-void mark_env(Env *e);
-
-void mark_exp(Exp exp)
+void mark_obj(GCObject *obj)
 {
-    if (exp.type != EXP_LIST && exp.type != EXP_PROC && exp.type != EXP_SYMBOL) {
+    if (!obj || obj->marked) {
         return;
     }
-    if (exp.obj->marked) {
-        return;
-    }
-    exp.obj->marked = true;
-    switch (exp.type) {
-    case EXP_LIST:
-        for (size_t i = 0; i < exp.obj->list.size; i++) {
-            mark_exp(exp.obj->list.data[i]);
+    obj->marked = true;
+    switch (obj->type) {
+    case GC_SYMBOL:
+        break;
+    case GC_LIST:
+        for (size_t i = 0; i < obj->list.size; i++) {
+            mark_obj(obj->list.data[i].obj);
         }
         break;
-    case EXP_PROC:
-        for (size_t i = 0; i < exp.obj->proc.params.size; i++) {
-            mark_exp(exp.obj->proc.params.data[i]);
-        }
-        mark_exp(exp.obj->proc.body);
-        mark_env(exp.obj->proc.env);
+    case GC_PROC:
+        mark_obj(obj->proc.params.obj);
+        mark_obj(obj->proc.body.obj);
+        mark_obj(obj->proc.env.obj);
         break;
+    case GC_HT:
+        HT_FOR_EACH(obj->ht, entry) {
+            if (!entry) {
+                continue;
+            }
+            mark_obj(entry->key.obj);
+            ExpType type = entry->value.type;
+            if (type == EXP_SYMBOL || type == EXP_LIST || type == EXP_PROC) {
+                mark_obj(entry->value.obj);
+            }
+        }
     default:
         break;
-    }
-    // graystack_add(&gc.graystack, obj);
-}
-
-void mark_env(Env *e)
-{
-    if (!e || e->marked) {
-        return;
-    }
-    e->marked = true;
-    HT_FOR_EACH(e->ht, entry) {
-        if (!entry) {
-            continue;
-        }
-        Exp exp = entry->value;
-        mark_exp(exp);
     }
 }
 
 void free_obj(GCObject *o)
 {
     switch (o->type) {
-    case EXP_SYMBOL:
+    case GC_SYMBOL:
         FREE_ARRAY(char, o->symbol, strlen(o->symbol));
         break;
-    case EXP_LIST:
+    case GC_LIST:
         list_free(&o->list);
         break;
-    case EXP_PROC:
-        list_free(&o->proc.params);
+    case GC_PROC:
+        break;
+    case GC_HT:
+        ht_free(&o->ht);
         break;
     default:
         break;
@@ -114,32 +94,6 @@ void sweep_objects()
                 gc.obj_list = cur;
             }
             free_obj(unreached);
-        }
-    }
-}
-
-void free_env(Env *e)
-{
-    ht_free(&e->ht);
-    FREE(Env, e);
-}
-
-void sweep_envs()
-{
-    Env *cur = gc.env_list, *prev = NULL;
-    while (cur) {
-        if (cur->marked) {
-            prev = cur;
-            cur = cur->next;
-        } else {
-            Env *unreached = cur;
-            cur = cur->next;
-            if (prev) {
-                prev->next = cur;
-            } else {
-                gc.env_list = cur;
-            }
-            free_env(unreached);
         }
     }
 }
@@ -176,9 +130,8 @@ void *reallocate(void *ptr, size_t old, size_t new)
 void gc_collect()
 {
     printf("collecting memory...\n");
-    mark_env(gc.cur_env);
+    mark_obj(gc.cur_env->obj);
     sweep_objects();
-    // sweep_envs();
 }
 
 void gc_set_current_env(Env *env)
@@ -188,8 +141,9 @@ void gc_set_current_env(Env *env)
 
 char *mem_strdup(const char *s, size_t size)
 {
-    char *dup = ALLOCATE(char, size);
+    char *dup = ALLOCATE(char, size+1);
     memcpy(dup, s, size);
+    dup[size] = '\0';
     return dup;
 }
 

@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include "scheme.h"
 
-typedef char *HtKey;
+typedef Exp HtKey;
 typedef Exp HtValue;
 typedef void *(*HtAllocator)(void *ptr, size_t old, size_t new);
 

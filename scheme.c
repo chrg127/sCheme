@@ -2,7 +2,7 @@
 #include "memory.h"
 #include "scheme.h"
 #include "ht.h"
-#include "env.h"
+#include "gcobject.h"
 
 VECTOR_DEFINE_INIT(List, Exp, list)
 VECTOR_DEFINE_ADD(List, Exp, list)
@@ -94,63 +94,56 @@ static Exp parse(const char *s)
     return read_from_tokens(&t);
 }
 
-Env *envdup(Env *e)
-{
-    Env *new_env = ALLOCATE(Env, 1);
-    memcpy(new_env, e, sizeof(Env));
-    return new_env;
-}
-
 // An environment with some scheme standard procedures.
 static Env standard_env()
 {
-    Env env = { .ht = HT_INIT_WITH_ALLOCATOR(reallocate), .outer = NULL };
-    ht_install(&env.ht, "+",          mkcproc(scheme_sum));
-    ht_install(&env.ht, "-",          mkcproc(scheme_sub));
-    ht_install(&env.ht, "*",          mkcproc(scheme_mul));
-    ht_install(&env.ht, ">",          mkcproc(scheme_gt));
-    ht_install(&env.ht, "<",          mkcproc(scheme_lt));
-    ht_install(&env.ht, ">=",         mkcproc(scheme_ge));
-    ht_install(&env.ht, "<=",         mkcproc(scheme_le));
-    ht_install(&env.ht, "=",          mkcproc(scheme_eq));
-    ht_install(&env.ht, "begin",      mkcproc(scheme_begin));
-    ht_install(&env.ht, "list",       mkcproc(scheme_list));
-    ht_install(&env.ht, "pi",         mknum(3.14159265358979323846));
-    ht_install(&env.ht, "cons",       mkcproc(scheme_cons));
-    ht_install(&env.ht, "car",        mkcproc(scheme_car));
-    ht_install(&env.ht, "cdr",        mkcproc(scheme_cdr));
-    ht_install(&env.ht, "length",     mkcproc(scheme_length));
-    ht_install(&env.ht, "null?",      mkcproc(scheme_is_null));
-    ht_install(&env.ht, "eq?",        mkcproc(scheme_is_eq));
-    ht_install(&env.ht, "equal?",     mkcproc(scheme_equal));
-    ht_install(&env.ht, "not",        mkcproc(scheme_not));
-    ht_install(&env.ht, "and",        mkcproc(scheme_and));
-    ht_install(&env.ht, "or",         mkcproc(scheme_or));
-    ht_install(&env.ht, "append",     mkcproc(scheme_append));
-    ht_install(&env.ht, "apply",      mkcproc(scheme_apply));
-    ht_install(&env.ht, "list?",      mkcproc(scheme_is_list));
-    ht_install(&env.ht, "number?",    mkcproc(scheme_is_number));
-    ht_install(&env.ht, "procedure?", mkcproc(scheme_is_proc));
-    ht_install(&env.ht, "symbol?",    mkcproc(scheme_is_symbol));
+    Env env = new_env(NULL);
+    ht_install(&env.obj->ht, mksym("+"),          mkcproc(scheme_sum));
+    ht_install(&env.obj->ht, mksym("-"),          mkcproc(scheme_sub));
+    ht_install(&env.obj->ht, mksym("*"),          mkcproc(scheme_mul));
+    ht_install(&env.obj->ht, mksym(">"),          mkcproc(scheme_gt));
+    ht_install(&env.obj->ht, mksym("<"),          mkcproc(scheme_lt));
+    ht_install(&env.obj->ht, mksym(">="),         mkcproc(scheme_ge));
+    ht_install(&env.obj->ht, mksym("<="),         mkcproc(scheme_le));
+    ht_install(&env.obj->ht, mksym("="),          mkcproc(scheme_eq));
+    ht_install(&env.obj->ht, mksym("begin"),      mkcproc(scheme_begin));
+    ht_install(&env.obj->ht, mksym("list"),       mkcproc(scheme_list));
+    ht_install(&env.obj->ht, mksym("pi"),         mknum(3.14159265358979323846));
+    ht_install(&env.obj->ht, mksym("cons"),       mkcproc(scheme_cons));
+    ht_install(&env.obj->ht, mksym("car"),        mkcproc(scheme_car));
+    ht_install(&env.obj->ht, mksym("cdr"),        mkcproc(scheme_cdr));
+    ht_install(&env.obj->ht, mksym("length"),     mkcproc(scheme_length));
+    ht_install(&env.obj->ht, mksym("null?"),      mkcproc(scheme_is_null));
+    ht_install(&env.obj->ht, mksym("eq?"),        mkcproc(scheme_is_eq));
+    ht_install(&env.obj->ht, mksym("equal?"),     mkcproc(scheme_equal));
+    ht_install(&env.obj->ht, mksym("not"),        mkcproc(scheme_not));
+    ht_install(&env.obj->ht, mksym("and"),        mkcproc(scheme_and));
+    ht_install(&env.obj->ht, mksym("or"),         mkcproc(scheme_or));
+    ht_install(&env.obj->ht, mksym("append"),     mkcproc(scheme_append));
+    ht_install(&env.obj->ht, mksym("apply"),      mkcproc(scheme_apply));
+    ht_install(&env.obj->ht, mksym("list?"),      mkcproc(scheme_is_list));
+    ht_install(&env.obj->ht, mksym("number?"),    mkcproc(scheme_is_number));
+    ht_install(&env.obj->ht, mksym("procedure?"), mkcproc(scheme_is_proc));
+    ht_install(&env.obj->ht, mksym("symbol?"),    mkcproc(scheme_is_symbol));
     return env;
 }
 
 // Find the innermost Env where var appears.
-static inline Env *env_find(Env *env, char *var)
+static inline Env *env_find(Env *env, Exp var)
 {
     if (!env)
         return NULL;
-    if (ht_lookup(&env->ht, var, NULL))
+    if (ht_lookup(&env->obj->ht, var, NULL))
         return env;
     return env_find(env->outer, var);
 }
 
 Exp proc_call(Procedure *proc, List args)
 {
-    Env env = { .ht = HT_INIT_WITH_ALLOCATOR(reallocate), .outer = proc->env };
+    Env env = new_env(&proc->env);
     gc_set_current_env(&env);
     for (size_t i = 0; i < args.size; i++) {
-        ht_install(&env.ht, AS_SYM(proc->params.data[i]), args.data[i]);
+        ht_install(&env.obj->ht, AS_LIST(proc->params).data[i], args.data[i]);
     }
     Exp exp = eval(proc->body, &env);
     gc_set_current_env(env.outer);
@@ -165,12 +158,12 @@ Exp eval(Exp x, Env *env)
     } else if (is_symbol(x)) {
         Symbol s = AS_SYM(x);
         // variable reference
-        Env *e = env_find(env, s);
+        Env *e = env_find(env, x);
         if (!e) {
             die("undefined symbol: %s\n", s);
         }
         Exp value;
-        bool found = ht_lookup(&e->ht, AS_SYM(x), &value);
+        bool found = ht_lookup(&e->obj->ht, x, &value);
         if (!found) {
             die("error: couldn't find %s in env\n", s);
         }
@@ -198,28 +191,26 @@ Exp eval(Exp x, Env *env)
         if (!is_symbol(l.data[1])) {
             die("define: bad syntax\n");
         }
-        Symbol symbol = AS_SYM(l.data[1]);
         Exp exp = l.data[2];
-        ht_install(&env->ht, symbol, eval(exp, env));
+        ht_install(&env->obj->ht, l.data[1], eval(exp, env));
         return (Exp) { .type = EXP_VOID };
     } else if (is_symbol(op) && strcmp(AS_SYM(op), "set!") == 0) {
         // assignment
         if (!is_symbol(l.data[1])) {
             die("set!: bad syntax\n");
         }
-        Symbol symbol = AS_SYM(l.data[1]);
         Exp exp = l.data[2];
-        Env *e = env_find(env, symbol);
+        Env *e = env_find(env, l.data[1]);
         if (!e) {
-            die("undefined symbol: %s\n", symbol);
+            die("undefined symbol: %s\n", AS_SYM(l.data[1]));
         }
-        ht_install(&e->ht, symbol, eval(exp, env));
+        ht_install(&e->obj->ht, l.data[1], eval(exp, env));
         return (Exp) { .type = EXP_VOID };
     } else if (is_symbol(op) && strcmp(AS_SYM(op), "lambda") == 0) {
         // procedure
         Exp params = l.data[1];
         Exp body   = l.data[2];
-        return mkproc(AS_LIST(params), body, envdup(env));
+        return mkproc(params, body, *env);
     }
     // procedure call
     Exp proc = eval(op, env);

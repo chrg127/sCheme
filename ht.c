@@ -4,6 +4,7 @@
 #include <string.h>
 #include <stdint.h>
 #include "scheme.h"
+#include "gcobject.h"
 
 typedef uint32_t u32;
 typedef uint8_t  u8;
@@ -26,12 +27,12 @@ static u32 hash_string(const char *str, size_t len)
 // Key types must have these traits: nullable, hashable and comparable
 // Value types must have these traits: nullable
 
-static inline bool is_empty_key(HtKey v)     { return v == NULL; }
-static inline u32 hash(HtKey v)              { return hash_string(v, strlen(v)); }
+static inline bool is_empty_key(HtKey v)     { return v.type == EXP_EMPTY; }
+static inline u32 hash(HtKey v)              { return hash_string(v.obj->symbol, strlen(v.obj->symbol)); }
 
 static inline bool key_equal(HtKey a, HtKey b)
 {
-    return strcmp(a, b) == 0;
+    return strcmp(a.obj->symbol, b.obj->symbol) == 0;
 }
 
 static inline bool is_empty_value(HtValue v) { return v.type == EXP_EMPTY; }
@@ -39,13 +40,13 @@ static inline bool is_empty_value(HtValue v) { return v.type == EXP_EMPTY; }
 // note that empty entries and tombstone entries must both have empty keys
 static inline void make_empty(HtEntry *entry)
 {
-    entry->key   = NULL;
+    entry->key   = (Exp) { .type = EXP_EMPTY };
     entry->value = (Exp) { .type = EXP_EMPTY };
 }
 
 static inline void make_tombstone(HtEntry *entry)
 {
-    entry->key   = NULL;
+    entry->key   = (Exp) { .type = EXP_EMPTY };
     entry->value = (Exp) { .type = 0xdeadbeef };
 }
 

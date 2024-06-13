@@ -27,6 +27,11 @@ typedef double Number;  // A Scheme number is implemented as a C int
 // ... But we won't create an Atom struct, and will embed both Symbol and
 // Number directly into Exp, for reasons explained below.
 
+// Lists, Symbols and user-defined procedure allocate memory.
+// Other values do not. Keep the former in a separate object to simplify
+// the garbage collector.
+typedef struct GCObject GCObject;
+
 typedef struct Exp Exp;
 
 // A Scheme List is implemented as a resizable array of expressions
@@ -45,8 +50,6 @@ typedef Exp (*CProc)(List args);
 
 // A Scheme expression is either an Atom, a List, a C Procedure,
 // a user-defined Procedure or void
-typedef struct GCObject GCObject;
-
 typedef enum ExpType {
     EXP_EMPTY = 0,
     EXP_VOID,
@@ -67,65 +70,32 @@ struct Exp {
     };
 };
 
-typedef struct Env Env;
+// An environment: a hashtable of ("var": exp) pairs, with an outer Env.
+typedef struct Env {
+    GCObject *obj; // hashtable is contained here
+    struct Env *outer;
+} Env;
 
 // A user-defined Scheme procedure
 typedef struct Procedure {
-    List params;
+    Exp params;
     Exp body;
-    Env *env;
+    Env env;
 } Procedure;
-
-// Lists, Symbols and user-defined procedure allocate memory.
-// Other values do not. Keep the former in a separate object to simplify
-// the garbage collector.
-typedef struct GCObject {
-    ExpType type;
-    union {
-        Symbol symbol;
-        List list;
-        Procedure proc;
-    };
-    bool marked;
-    struct GCObject *next;
-} GCObject;
 
 // Some utilities for working with Exp.
 static inline bool is_symbol(Exp exp) { return exp.type == EXP_SYMBOL; }
 static inline bool is_number(Exp exp) { return exp.type == EXP_NUMBER; }
 static inline bool is_list(Exp exp)   { return exp.type == EXP_LIST; }
 
-static inline Exp mkobj(GCObject from)
-{
-    return (Exp) { .type = from.type, .obj = alloc_obj(from) };
-}
-
-static inline Exp mksym(Symbol s)
-{
-    return mkobj((GCObject) { .type = EXP_SYMBOL, .symbol = s });
-}
-
 static inline Exp mknum(double n)
 {
     return (Exp) { .type = EXP_NUMBER, .number = n };
 }
 
-static inline Exp mklist(List l)
-{
-    return mkobj((GCObject) { .type = EXP_LIST, .list = l });
-}
-
 static inline Exp mkcproc(CProc cproc)
 {
     return (Exp) { .type = EXP_C_PROC, .cproc = cproc };
-}
-
-static inline Exp mkproc(List params, Exp body, Env *env)
-{
-    return mkobj((GCObject) {
-        .type = EXP_PROC,
-        .proc = (Procedure) { .params = params, .body = body, .env = env, }
-    });
 }
 
 #define SCHEME_TRUE mknum(1)
