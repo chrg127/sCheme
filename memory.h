@@ -7,8 +7,11 @@ typedef struct GCObject GCObject;
 
 void *reallocate(void *ptr, size_t old, size_t new);
 void gc_collect();
-void gc_set_current_env(Env *env);
+void gc_push_env(Env *env);
+void gc_pop_env();
 char *mem_strdup(const char *s, size_t size);
+void gc_save(GCObject *obj);
+void gc_unsave();
 
 #define ALLOCATE(type, count) \
     (type *) reallocate(NULL, 0, sizeof(type) * (count))

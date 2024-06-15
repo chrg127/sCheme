@@ -11,15 +11,19 @@
 static struct {
     size_t bytes_allocated;
     size_t next;
-    Env *cur_env;
     GCObject *obj_list;
     Env *env_list;
+    GCObject *savestack[BUFSIZ];
+    int sp;
+    Env *envstack[BUFSIZ];
+    int env_sp;
 } gc = {
     .bytes_allocated = 0,
     .next = 8192,
-    .cur_env = NULL,
     .obj_list = NULL,
     .env_list = NULL,
+    .sp = 0,
+    .env_sp = 0,
 };
 
 void mark_obj(GCObject *obj)
@@ -33,12 +37,16 @@ void mark_obj(GCObject *obj)
         break;
     case GC_LIST:
         for (size_t i = 0; i < obj->list.size; i++) {
-            mark_obj(obj->list.data[i].obj);
+            if (is_obj(obj->list.data[i])) {
+                mark_obj(obj->list.data[i].obj);
+            }
         }
         break;
     case GC_PROC:
-        mark_obj(obj->proc.params.obj);
-        mark_obj(obj->proc.body.obj);
+        mark_obj(obj->proc.params.obj); // always a list
+        if (is_obj(obj->proc.body)) {
+            mark_obj(obj->proc.body.obj); // may just be a simple number...
+        }
         mark_obj(obj->proc.env.obj);
         break;
     case GC_HT:
@@ -46,9 +54,8 @@ void mark_obj(GCObject *obj)
             if (!entry) {
                 continue;
             }
-            mark_obj(entry->key.obj);
-            ExpType type = entry->value.type;
-            if (type == EXP_SYMBOL || type == EXP_LIST || type == EXP_PROC) {
+            mark_obj(entry->key.obj); // always a symbol
+            if (is_obj(entry->value)) {
                 mark_obj(entry->value.obj);
             }
         }
@@ -59,6 +66,11 @@ void mark_obj(GCObject *obj)
 
 void free_obj(GCObject *o)
 {
+    // if (o->type == 0) {
+    //     fprintf(stderr, "trying to free bad object\n");
+    //     exit(1);
+    // }
+    printf("freeing object of type %d\n", o->type);
     switch (o->type) {
     case GC_SYMBOL:
         FREE_ARRAY(char, o->symbol, strlen(o->symbol));
@@ -82,7 +94,6 @@ void sweep_objects()
     GCObject *cur = gc.obj_list, *prev = NULL;
     while (cur) {
         if (cur->marked) {
-            cur->marked = false;
             prev = cur;
             cur = cur->next;
         } else {
@@ -96,29 +107,31 @@ void sweep_objects()
             free_obj(unreached);
         }
     }
+    for (GCObject *obj = gc.obj_list; obj; obj = obj->next) {
+        obj->marked = false;
+    }
 }
 
 /* public functions start here: */
 
 void *reallocate(void *ptr, size_t old, size_t new)
 {
-    gc.bytes_allocated += new - old;
-
-    if (new > old) {
-        printf("allocating %ld bytes...\n", new - old);
-        // gc_collect();
-    } else if (new == 0) {
-        printf("freeing %ld bytes...\n", old);
-    }
-
-    if (gc.bytes_allocated > gc.next) {
-        // gc_collect();
-    }
+    // gc.bytes_allocated += new - old;
 
     if (new == 0) {
+        printf("freeing %ld bytes...\n", old);
         free(ptr);
         return NULL;
     }
+
+    if (new > old) {
+        printf("allocating %ld bytes...\n", new - old);
+        gc_collect();
+    }
+
+    // if (gc.bytes_allocated > gc.next) {
+    //     gc_collect();
+    // }
 
     void *res = realloc(ptr, new);
     if (!res) {
@@ -130,13 +143,23 @@ void *reallocate(void *ptr, size_t old, size_t new)
 void gc_collect()
 {
     printf("collecting memory...\n");
-    mark_obj(gc.cur_env->obj);
+    for (int i = 0; i < gc.env_sp; i++) {
+        mark_obj(gc.envstack[i]->obj);
+    }
+    for (int i = 0; i < gc.sp; i++) {
+        mark_obj(gc.savestack[i]);
+    }
     sweep_objects();
 }
 
-void gc_set_current_env(Env *env)
+void gc_push_env(Env *env)
 {
-    gc.cur_env = env;
+    gc.envstack[gc.env_sp++] = env;
+}
+
+void gc_pop_env()
+{
+    gc.env_sp--;
 }
 
 char *mem_strdup(const char *s, size_t size)
@@ -155,5 +178,15 @@ GCObject *alloc_obj(GCObject from)
     obj->next = gc.obj_list;
     gc.obj_list = obj;
     return obj;
+}
+
+void gc_save(GCObject *obj)
+{
+    gc.savestack[gc.sp++] = obj;
+}
+
+void gc_unsave()
+{
+    gc.sp--;
 }
 

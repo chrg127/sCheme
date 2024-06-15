@@ -69,16 +69,25 @@ static Exp read_from_tokens(Tokenizer *t)
     if (token.s == NULL) {
         return (Exp) { .type = EXP_EOF };
     } else if (token.s[token.start] == '(') {
-        List list = VECTOR_INIT();
+        Exp list_exp = mklist((List) VECTOR_INIT());
+        List *list = &list_exp.obj->list;
+        gc_save(list_exp.obj);
         while (t->cur.s != NULL && t->cur.s[0] != ')') {
             Exp exp = read_from_tokens(t);
-            list_add(&list, exp);
+            if (is_obj(exp)) {
+                gc_save(exp.obj);
+            }
+            list_add(list, exp);
+            if (is_obj(exp)) {
+                gc_unsave();
+            }
         }
         if (t->cur.s == NULL) {
             die("error: unexpected EOF\n");
         }
         next_token(t); // pop off ')'
-        return mklist(list);
+        gc_unsave(list_exp.obj);
+        return list_exp;
     } else if (token.s[token.start] == ')') {
         die("unexpected ')'\n");
     } else {
@@ -94,37 +103,52 @@ static Exp parse(const char *s)
     return read_from_tokens(&t);
 }
 
+static void add_env(Env *env, Exp symbol, Exp exp)
+{
+    gc_save(symbol.obj);
+    if (is_obj(exp)) {
+        gc_save(exp.obj);
+    }
+    ht_install(&env->obj->ht, symbol, exp);
+    if (is_obj(exp)) {
+        gc_unsave();
+    }
+    gc_unsave();
+}
+
 // An environment with some scheme standard procedures.
 static Env standard_env()
 {
     Env env = new_env(NULL);
-    ht_install(&env.obj->ht, mksym("+"),          mkcproc(scheme_sum));
-    ht_install(&env.obj->ht, mksym("-"),          mkcproc(scheme_sub));
-    ht_install(&env.obj->ht, mksym("*"),          mkcproc(scheme_mul));
-    ht_install(&env.obj->ht, mksym(">"),          mkcproc(scheme_gt));
-    ht_install(&env.obj->ht, mksym("<"),          mkcproc(scheme_lt));
-    ht_install(&env.obj->ht, mksym(">="),         mkcproc(scheme_ge));
-    ht_install(&env.obj->ht, mksym("<="),         mkcproc(scheme_le));
-    ht_install(&env.obj->ht, mksym("="),          mkcproc(scheme_eq));
-    ht_install(&env.obj->ht, mksym("begin"),      mkcproc(scheme_begin));
-    ht_install(&env.obj->ht, mksym("list"),       mkcproc(scheme_list));
-    ht_install(&env.obj->ht, mksym("pi"),         mknum(3.14159265358979323846));
-    ht_install(&env.obj->ht, mksym("cons"),       mkcproc(scheme_cons));
-    ht_install(&env.obj->ht, mksym("car"),        mkcproc(scheme_car));
-    ht_install(&env.obj->ht, mksym("cdr"),        mkcproc(scheme_cdr));
-    ht_install(&env.obj->ht, mksym("length"),     mkcproc(scheme_length));
-    ht_install(&env.obj->ht, mksym("null?"),      mkcproc(scheme_is_null));
-    ht_install(&env.obj->ht, mksym("eq?"),        mkcproc(scheme_is_eq));
-    ht_install(&env.obj->ht, mksym("equal?"),     mkcproc(scheme_equal));
-    ht_install(&env.obj->ht, mksym("not"),        mkcproc(scheme_not));
-    ht_install(&env.obj->ht, mksym("and"),        mkcproc(scheme_and));
-    ht_install(&env.obj->ht, mksym("or"),         mkcproc(scheme_or));
-    ht_install(&env.obj->ht, mksym("append"),     mkcproc(scheme_append));
-    ht_install(&env.obj->ht, mksym("apply"),      mkcproc(scheme_apply));
-    ht_install(&env.obj->ht, mksym("list?"),      mkcproc(scheme_is_list));
-    ht_install(&env.obj->ht, mksym("number?"),    mkcproc(scheme_is_number));
-    ht_install(&env.obj->ht, mksym("procedure?"), mkcproc(scheme_is_proc));
-    ht_install(&env.obj->ht, mksym("symbol?"),    mkcproc(scheme_is_symbol));
+    gc_push_env(&env);
+    add_env(&env, mkcsym("+"),          mkcproc(scheme_sum));
+    add_env(&env, mkcsym("-"),          mkcproc(scheme_sub));
+    add_env(&env, mkcsym("*"),          mkcproc(scheme_mul));
+    add_env(&env, mkcsym(">"),          mkcproc(scheme_gt));
+    add_env(&env, mkcsym("<"),          mkcproc(scheme_lt));
+    add_env(&env, mkcsym(">="),         mkcproc(scheme_ge));
+    add_env(&env, mkcsym("<="),         mkcproc(scheme_le));
+    add_env(&env, mkcsym("="),          mkcproc(scheme_eq));
+    add_env(&env, mkcsym("begin"),      mkcproc(scheme_begin));
+    add_env(&env, mkcsym("list"),       mkcproc(scheme_list));
+    add_env(&env, mkcsym("pi"),         mknum(3.14159265358979323846));
+    add_env(&env, mkcsym("cons"),       mkcproc(scheme_cons));
+    add_env(&env, mkcsym("car"),        mkcproc(scheme_car));
+    add_env(&env, mkcsym("cdr"),        mkcproc(scheme_cdr));
+    add_env(&env, mkcsym("length"),     mkcproc(scheme_length));
+    add_env(&env, mkcsym("null?"),      mkcproc(scheme_is_null));
+    add_env(&env, mkcsym("eq?"),        mkcproc(scheme_is_eq));
+    add_env(&env, mkcsym("equal?"),     mkcproc(scheme_equal));
+    add_env(&env, mkcsym("not"),        mkcproc(scheme_not));
+    add_env(&env, mkcsym("and"),        mkcproc(scheme_and));
+    add_env(&env, mkcsym("or"),         mkcproc(scheme_or));
+    add_env(&env, mkcsym("append"),     mkcproc(scheme_append));
+    add_env(&env, mkcsym("apply"),      mkcproc(scheme_apply));
+    add_env(&env, mkcsym("list?"),      mkcproc(scheme_is_list));
+    add_env(&env, mkcsym("number?"),    mkcproc(scheme_is_number));
+    add_env(&env, mkcsym("procedure?"), mkcproc(scheme_is_proc));
+    add_env(&env, mkcsym("symbol?"),    mkcproc(scheme_is_symbol));
+    gc_pop_env();
     return env;
 }
 
@@ -141,12 +165,12 @@ static inline Env *env_find(Env *env, Exp var)
 Exp proc_call(Procedure *proc, List args)
 {
     Env env = new_env(&proc->env);
-    gc_set_current_env(&env);
+    gc_push_env(&env);
     for (size_t i = 0; i < args.size; i++) {
-        ht_install(&env.obj->ht, AS_LIST(proc->params).data[i], args.data[i]);
+        add_env(&env, AS_LIST(proc->params).data[i], args.data[i]);
     }
     Exp exp = eval(proc->body, &env);
-    gc_set_current_env(env.outer);
+    gc_pop_env();
     return exp;
 }
 
@@ -173,6 +197,9 @@ Exp eval(Exp x, Env *env)
         return x;
     }
     List l = AS_LIST(x);
+    if (l.size == 0) {
+        die("missing procedure expression\n");
+    }
     Exp op = l.data[0];
     if (is_symbol(op) && strcmp(AS_SYM(op), "quote") == 0) {
         return l.data[1];
@@ -192,7 +219,7 @@ Exp eval(Exp x, Env *env)
             die("define: bad syntax\n");
         }
         Exp exp = l.data[2];
-        ht_install(&env->obj->ht, l.data[1], eval(exp, env));
+        add_env(env, l.data[1], eval(exp, env));
         return (Exp) { .type = EXP_VOID };
     } else if (is_symbol(op) && strcmp(AS_SYM(op), "set!") == 0) {
         // assignment
@@ -204,7 +231,7 @@ Exp eval(Exp x, Env *env)
         if (!e) {
             die("undefined symbol: %s\n", AS_SYM(l.data[1]));
         }
-        ht_install(&e->obj->ht, l.data[1], eval(exp, env));
+        add_env(e, l.data[1], eval(exp, env));
         return (Exp) { .type = EXP_VOID };
     } else if (is_symbol(op) && strcmp(AS_SYM(op), "lambda") == 0) {
         // procedure
@@ -217,15 +244,26 @@ Exp eval(Exp x, Env *env)
     if (proc.type != EXP_C_PROC && proc.type != EXP_PROC) {
         die("error: not a procedure\n");
     }
-    // wrap new list in an object. this is to make sure it will be found
+    // wrap args list in an object. this is to make sure it will be found
     // by the garbage collector.
+    // procedure calls may not use the underlying list to create new objects.
     Exp args = mklist((List) VECTOR_INIT());
+    gc_save(args.obj);
     for (size_t i = 1; i < l.size; i++) {
-        list_add(&AS_LIST(args), eval(l.data[i], env));
+        Exp new_elem = eval(l.data[i], env);
+        if (is_obj(new_elem)) {
+            gc_save(new_elem.obj);
+        }
+        list_add(&AS_LIST(args), new_elem);
+        if (is_obj(new_elem)) {
+            gc_unsave(new_elem.obj);
+        }
     }
-    return proc.type == EXP_C_PROC
+    Exp res = proc.type == EXP_C_PROC
         ? proc.cproc(AS_LIST(args))
         : proc_call(&AS_PROC(proc), AS_LIST(args));
+    gc_unsave();
+    return res;
 }
 
 static void print(Exp exp)
@@ -262,7 +300,7 @@ static void print(Exp exp)
 static void repl()
 {
     Env env = standard_env();
-    gc_set_current_env(&env);
+    gc_push_env(&env);
     while (true) {
         printf("sCheme> ");
         char input[BUFSIZ] = {0};
@@ -271,12 +309,18 @@ static void repl()
         printf("parsed = ");
         print(parsed);
         printf("\n");
+        if (is_obj(parsed)) {
+            gc_save(parsed.obj);
+        }
         Exp val = eval(parsed, &env);
         if (val.type == EXP_EOF) {
             printf("\n");
             return;
         }
         print(val);
+        if (is_obj(parsed)) {
+            gc_unsave();
+        }
         printf("\n");
         gc_collect();
     }

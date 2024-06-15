@@ -126,13 +126,17 @@ Exp scheme_begin(List args)
 
 Exp scheme_list(List args)
 {
-    return mklist(args);
+    List new_list = VECTOR_INIT();
+    for (size_t i = 0; i < args.size; i++) {
+        list_add(&new_list, args.data[i]);
+    }
+    return mklist(new_list);
 }
 
 Exp scheme_cons(List args)
 {
     if (args.size != 2) die("cons: arity mismatch\n");
-    if (args.data[0].type != EXP_LIST) die("cons: second arg must be a list\n");
+    if (args.data[1].type != EXP_LIST) die("cons: second arg must be a list\n");
     List res = VECTOR_INIT();
     list_add(&res, args.data[0]);
     for (size_t i = 0; i < AS_LIST(args.data[1]).size; i++) {
