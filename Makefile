@@ -2,7 +2,7 @@ programname := scheme
 # can be: debug, release
 build := debug
 
-files := scheme.c ht.c cprocs.c memory.c
+files := scheme.c ht.c memory.c
 
 CC := gcc
 CFLAGS := -Wall -Wextra -pedantic -I. -std=c11
@@ -13,7 +13,7 @@ ifeq ($(build),debug)
     CFLAGS += -g -DDEBUG
 else ifeq ($(build),release)
     outdir := release
-    CFLAGS += -O3
+    CFLAGS += -O3 -DNDEBUG
 else
 	$(error error: invalid value for variable 'build')
 endif

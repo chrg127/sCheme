@@ -20,6 +20,15 @@ typedef struct GCObject {
     struct GCObject *next;
 } GCObject;
 
+#define AS_LIST(e) (e).obj->list
+#define AS_PROC(e) (e).obj->proc
+#define AS_SYM(e) (e).obj->symbol
+
+static inline bool is_obj(Exp exp)
+{
+    return exp.type == EXP_LIST || exp.type == EXP_PROC || exp.type == EXP_SYMBOL;
+}
+
 GCObject *alloc_obj(GCObject from);
 
 static inline Exp mkobj(ExpType type, GCObject from)
@@ -30,11 +39,6 @@ static inline Exp mkobj(ExpType type, GCObject from)
 static inline Exp mksym(Symbol s)
 {
     return mkobj(EXP_SYMBOL, (GCObject) { .type = GC_SYMBOL, .symbol = s });
-}
-
-static inline Exp mkcsym(const char *s)
-{
-    return mksym(mem_strdup(s, strlen(s)));
 }
 
 static inline Exp mklist(List l)
@@ -56,10 +60,5 @@ static inline Env new_env(Env *outer)
         .obj = alloc_obj((GCObject) { .type = GC_HT, .ht = HT_INIT_WITH_ALLOCATOR(reallocate) }),
         .outer = outer,
     };
-}
-
-static inline bool is_obj(Exp exp)
-{
-    return exp.type == EXP_LIST || exp.type == EXP_PROC || exp.type == EXP_SYMBOL;
 }
 

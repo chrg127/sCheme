@@ -1,7 +1,5 @@
-#include "scheme.h"
-#include "gcobject.h"
-
 // All scheme procedures that are inside the standard environment.
+
 Exp scheme_sum(List args)
 {
     double sum = 0;
@@ -239,7 +237,7 @@ Exp scheme_append(List args)
 {
     List res = VECTOR_INIT();
     for (size_t i = 0; i < args.size; i++) {
-        if (!is_list(args.data[i])) {
+        if (args.data[i].type != EXP_LIST) {
             die("append: argument #%d is not a list\n", i);
         }
         for (size_t j = 0; j < AS_LIST(args.data[i]).size; j++) {

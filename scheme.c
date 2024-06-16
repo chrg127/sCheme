@@ -8,6 +8,9 @@ VECTOR_DEFINE_INIT(List, Exp, list)
 VECTOR_DEFINE_ADD(List, Exp, list)
 VECTOR_DEFINE_FREE(List, Exp, list)
 
+void save(Exp exp) { if (is_obj(exp)) { gc_save(exp.obj); } }
+void unsave(Exp exp) { if (is_obj(exp)) { gc_unsave(); } }
+
 noreturn void die(const char *fmt, ...)
 {
     va_list args;
@@ -15,6 +18,14 @@ noreturn void die(const char *fmt, ...)
     vfprintf(stderr, fmt, args);
     va_end(args);
     exit(1);
+}
+
+char *string_dup(const char *s, size_t size)
+{
+    char *dup = ALLOCATE(char, size+1);
+    memcpy(dup, s, size);
+    dup[size] = '\0';
+    return dup;
 }
 
 typedef struct Token {
@@ -41,7 +52,9 @@ static Token next_token(Tokenizer *t)
         return t->prev;
     } else if (t->s[t->i] == '(' || t->s[t->i] == ')') {
         t->i++;
-        t->cur = (Token) { .s = t->s[t->i-1] == '(' ? "(" : ")", .start = 0, .end = 0 };
+        t->cur = (Token) {
+            .s = t->s[t->i-1] == '(' ? "(" : ")", .start = 0, .end = 0
+        };
         return t->prev;
     }
     size_t start = t->i;
@@ -58,7 +71,7 @@ static Exp atom(Token token)
     char *endptr;
     long num = strtol(token.s + token.start, &endptr, 0);
     return endptr == token.s + token.start
-        ? mksym(mem_strdup(token.s + token.start, token.end - token.start))
+        ? mksym(string_dup(token.s + token.start, token.end - token.start))
         : mknum(num);
 }
 
@@ -71,22 +84,18 @@ static Exp read_from_tokens(Tokenizer *t)
     } else if (token.s[token.start] == '(') {
         Exp list_exp = mklist((List) VECTOR_INIT());
         List *list = &list_exp.obj->list;
-        gc_save(list_exp.obj);
+        save(list_exp);
         while (t->cur.s != NULL && t->cur.s[0] != ')') {
             Exp exp = read_from_tokens(t);
-            if (is_obj(exp)) {
-                gc_save(exp.obj);
-            }
+            save(exp);
             list_add(list, exp);
-            if (is_obj(exp)) {
-                gc_unsave();
-            }
+            unsave(exp);
         }
         if (t->cur.s == NULL) {
             die("error: unexpected EOF\n");
         }
         next_token(t); // pop off ')'
-        gc_unsave(list_exp.obj);
+        unsave(list_exp);
         return list_exp;
     } else if (token.s[token.start] == ')') {
         die("unexpected ')'\n");
@@ -105,15 +114,18 @@ static Exp parse(const char *s)
 
 static void add_env(Env *env, Exp symbol, Exp exp)
 {
-    gc_save(symbol.obj);
-    if (is_obj(exp)) {
-        gc_save(exp.obj);
-    }
+    save(symbol);
+    save(exp);
     ht_install(&env->obj->ht, symbol, exp);
-    if (is_obj(exp)) {
-        gc_unsave();
-    }
-    gc_unsave();
+    unsave(exp);
+    unsave(symbol);
+}
+
+#include "cprocs.c"
+
+static inline Exp mkcsym(const char *s)
+{
+    return mksym(string_dup(s, strlen(s)));
 }
 
 // An environment with some scheme standard procedures.
@@ -248,30 +260,26 @@ Exp eval(Exp x, Env *env)
     // by the garbage collector.
     // procedure calls may not use the underlying list to create new objects.
     Exp args = mklist((List) VECTOR_INIT());
-    gc_save(args.obj);
+    save(args);
     for (size_t i = 1; i < l.size; i++) {
         Exp new_elem = eval(l.data[i], env);
-        if (is_obj(new_elem)) {
-            gc_save(new_elem.obj);
-        }
+        save(new_elem);
         list_add(&AS_LIST(args), new_elem);
-        if (is_obj(new_elem)) {
-            gc_unsave(new_elem.obj);
-        }
+        unsave(new_elem);
     }
     Exp res = proc.type == EXP_C_PROC
         ? proc.cproc(AS_LIST(args))
         : proc_call(&AS_PROC(proc), AS_LIST(args));
-    gc_unsave();
+    unsave(args);
     return res;
 }
 
 static void print(Exp exp)
 {
     switch (exp.type) {
-    case EXP_EMPTY: break;
+    case EXP_EMPTY:  break;
     case EXP_SYMBOL: printf("%s", AS_SYM(exp)); break;
-    case EXP_NUMBER: printf("%g", exp.number); break;
+    case EXP_NUMBER: printf("%g", exp.number);  break;
     case EXP_LIST:
         printf("(");
         for (size_t i = 0; i < AS_LIST(exp).size; i++) {
@@ -282,17 +290,10 @@ static void print(Exp exp)
         }
         printf(")");
         break;
-    case EXP_C_PROC:
-        printf("<#c-procedure>");
-        break;
-    case EXP_PROC:
-        printf("<#procedure>");
-        break;
-    case EXP_VOID:
-        printf("<#void>");
-        break;
-    case EXP_EOF:
-        break;
+    case EXP_C_PROC: printf("<#c-procedure>"); break;
+    case EXP_PROC:   printf("<#procedure>");   break;
+    case EXP_VOID:   printf("<#void>");        break;
+    case EXP_EOF:    break;
     }
 }
 
@@ -306,24 +307,22 @@ static void repl()
         char input[BUFSIZ] = {0};
         fgets(input, sizeof(input), stdin);
         Exp parsed = parse(input);
+#ifdef DEBUG
         printf("parsed = ");
         print(parsed);
         printf("\n");
-        if (is_obj(parsed)) {
-            gc_save(parsed.obj);
-        }
+#endif
+        save(parsed);
         Exp val = eval(parsed, &env);
         if (val.type == EXP_EOF) {
             printf("\n");
-            return;
+            break;
         }
         print(val);
-        if (is_obj(parsed)) {
-            gc_unsave();
-        }
+        unsave(parsed);
         printf("\n");
-        gc_collect();
     }
+    gc_sweep();
 }
 
 int main()

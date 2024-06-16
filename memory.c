@@ -8,6 +8,8 @@
 #include "gcobject.h"
 #include "vector.h"
 
+#define GC_HEAP_GROW_FACTOR 2
+
 static struct {
     size_t bytes_allocated;
     size_t next;
@@ -19,7 +21,7 @@ static struct {
     int env_sp;
 } gc = {
     .bytes_allocated = 0,
-    .next = 8192,
+    .next = 1024 * 1024,
     .obj_list = NULL,
     .env_list = NULL,
     .sp = 0,
@@ -66,14 +68,12 @@ void mark_obj(GCObject *obj)
 
 void free_obj(GCObject *o)
 {
-    // if (o->type == 0) {
-    //     fprintf(stderr, "trying to free bad object\n");
-    //     exit(1);
-    // }
+#ifdef DEBUG
     printf("freeing object of type %d\n", o->type);
+#endif
     switch (o->type) {
     case GC_SYMBOL:
-        FREE_ARRAY(char, o->symbol, strlen(o->symbol));
+        FREE_ARRAY(char, o->symbol, strlen(o->symbol) + 1);
         break;
     case GC_LIST:
         list_free(&o->list);
@@ -112,26 +112,29 @@ void sweep_objects()
     }
 }
 
-/* public functions start here: */
-
 void *reallocate(void *ptr, size_t old, size_t new)
 {
-    // gc.bytes_allocated += new - old;
+    gc.bytes_allocated += (new - old);
 
     if (new == 0) {
+#ifdef DEBUG
         printf("freeing %ld bytes...\n", old);
+#endif
         free(ptr);
         return NULL;
     }
 
     if (new > old) {
+#ifdef DEBUG
         printf("allocating %ld bytes...\n", new - old);
-        gc_collect();
+#endif
+        // gc_collect();
     }
 
-    // if (gc.bytes_allocated > gc.next) {
-    //     gc_collect();
-    // }
+    if (gc.bytes_allocated > gc.next) {
+        // gc_collect();
+        gc.next = gc.bytes_allocated * GC_HEAP_GROW_FACTOR;
+    }
 
     void *res = realloc(ptr, new);
     if (!res) {
@@ -142,7 +145,9 @@ void *reallocate(void *ptr, size_t old, size_t new)
 
 void gc_collect()
 {
+#ifdef DEBUG
     printf("collecting memory...\n");
+#endif
     for (int i = 0; i < gc.env_sp; i++) {
         mark_obj(gc.envstack[i]->obj);
     }
@@ -152,41 +157,30 @@ void gc_collect()
     sweep_objects();
 }
 
-void gc_push_env(Env *env)
-{
-    gc.envstack[gc.env_sp++] = env;
-}
+void gc_push_env(Env *env) { gc.envstack[gc.env_sp++] = env; }
+void gc_pop_env()          { gc.env_sp--; }
 
-void gc_pop_env()
-{
-    gc.env_sp--;
-}
+void gc_save(GCObject *obj) { gc.savestack[gc.sp++] = obj; }
+void gc_unsave()            { gc.sp--; }
 
-char *mem_strdup(const char *s, size_t size)
+void gc_sweep()
 {
-    char *dup = ALLOCATE(char, size+1);
-    memcpy(dup, s, size);
-    dup[size] = '\0';
-    return dup;
+    sweep_objects();
+#ifdef DEBUG
+    if (gc.bytes_allocated == 0) {
+        printf("hooray! nothing allocated anymore!\n");
+    }
+#endif
 }
 
 GCObject *alloc_obj(GCObject from)
 {
+    printf("allocating object of type %d\n", from.type);
     GCObject *obj = ALLOCATE(GCObject, 1);
     memcpy(obj, &from, sizeof(GCObject));
     obj->marked = false;
     obj->next = gc.obj_list;
     gc.obj_list = obj;
     return obj;
-}
-
-void gc_save(GCObject *obj)
-{
-    gc.savestack[gc.sp++] = obj;
-}
-
-void gc_unsave()
-{
-    gc.sp--;
 }
 

@@ -18,6 +18,9 @@ static inline size_t vector_grow_cap(size_t old_cap)
 #define VECTOR_ARRAY_FREE(type, ptr, size) \
     free(ptr)
 
+#define VECTOR_DECLARE_STRUCT(T, TVal) \
+    typedef struct T { size_t size; size_t cap; TVal *data; } T
+
 #define VECTOR_DECLARE_INIT(T, TVal, header)  void header##_init(T *arr)
 #define VECTOR_DECLARE_FREE(T, TVal, header)  void header##_add(T *arr, TVal value)
 #define VECTOR_DECLARE_ADD(T, TVal, header) void header##_free(T *arr)

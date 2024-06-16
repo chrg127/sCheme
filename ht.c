@@ -76,7 +76,9 @@ static HtEntry *find_entry(HtEntry *entries, size_t cap, HtKey key)
 
 static void adjust_cap(HashTable *tab, size_t cap)
 {
-    HtEntry *entries = (HtEntry *) tab->allocate(NULL, sizeof(HtEntry) * tab->cap, sizeof(HtEntry) * cap);
+    HtEntry *entries = (HtEntry *) tab->allocate(
+        NULL, 0, sizeof(HtEntry) * cap
+    );
     for (size_t i = 0; i < cap; i++)
         make_empty(&entries[i]);
 
@@ -91,7 +93,7 @@ static void adjust_cap(HashTable *tab, size_t cap)
         tab->size++;
     }
     // free tab's array
-    tab->allocate(tab->entries, tab->cap, 0);
+    tab->allocate(tab->entries, sizeof(HtEntry) * tab->cap, 0);
     tab->entries = entries;
     tab->cap     = cap;
 }
