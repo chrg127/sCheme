@@ -175,7 +175,9 @@ void gc_sweep()
 
 GCObject *alloc_obj(GCObject from)
 {
+#ifdef DEBUG
     printf("allocating object of type %d\n", from.type);
+#endif
     GCObject *obj = ALLOCATE(GCObject, 1);
     memcpy(obj, &from, sizeof(GCObject));
     obj->marked = false;

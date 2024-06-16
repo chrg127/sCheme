@@ -95,4 +95,8 @@ static inline Exp mkcproc(CProc cproc)
 
 Exp eval(Exp x, Env *env);
 Exp proc_call(Procedure *proc, List args);
+void repl();
+void print();
+void exec_string(const char *s);
+
 

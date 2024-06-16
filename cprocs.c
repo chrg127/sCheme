@@ -287,3 +287,17 @@ Exp scheme_is_symbol(List args)
     return mknum(is_symbol(args.data[0]));
 }
 
+Exp scheme_display(List args)
+{
+  if (args.size != 1) die("display: arity mismatch\n");
+  print(args.data[0]);
+  return (Exp) { .type = EXP_VOID };
+}
+
+Exp scheme_newline(List args)
+{
+  if (args.size != 0) die("newline: arity mismatch\n");
+  printf("\n");
+  return (Exp) { .type = EXP_VOID };
+}
+

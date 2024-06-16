@@ -160,6 +160,8 @@ static Env standard_env()
     add_env(&env, mkcsym("number?"),    mkcproc(scheme_is_number));
     add_env(&env, mkcsym("procedure?"), mkcproc(scheme_is_proc));
     add_env(&env, mkcsym("symbol?"),    mkcproc(scheme_is_symbol));
+    add_env(&env, mkcsym("display"),    mkcproc(scheme_display));
+    add_env(&env, mkcsym("newline"),    mkcproc(scheme_newline));
     gc_pop_env();
     return env;
 }
@@ -274,7 +276,7 @@ Exp eval(Exp x, Env *env)
     return res;
 }
 
-static void print(Exp exp)
+void print(Exp exp)
 {
     switch (exp.type) {
     case EXP_EMPTY:  break;
@@ -292,13 +294,13 @@ static void print(Exp exp)
         break;
     case EXP_C_PROC: printf("<#c-procedure>"); break;
     case EXP_PROC:   printf("<#procedure>");   break;
-    case EXP_VOID:   printf("<#void>");        break;
+    case EXP_VOID:   break;
     case EXP_EOF:    break;
     }
 }
 
 // A prompt-read-eval-print loop.
-static void repl()
+void repl()
 {
     Env env = standard_env();
     gc_push_env(&env);
@@ -322,12 +324,31 @@ static void repl()
         unsave(parsed);
         printf("\n");
     }
+    gc_pop_env(&env);
     gc_sweep();
 }
 
-int main()
+void exec_string(const char *input)
 {
-    repl();
-    return 0;
+    Env env = standard_env();
+    gc_push_env(&env);
+    Exp parsed;
+    Tokenizer t = { .i = 0, .s = input, .len = strlen(input) };
+    next_token(&t);
+    while (parsed = read_from_tokens(&t), parsed.type != EXP_EOF) {
+#ifdef DEBUG
+        printf("parsed = ");
+        print(parsed);
+        printf("\n");
+#endif
+        save(parsed);
+        Exp val = eval(parsed, &env);
+        print(val);
+        unsave(parsed);
+        if (val.type != EXP_VOID && val.type != EXP_EMPTY)
+            printf("\n");
+    }
+    gc_pop_env(&env);
+    gc_sweep();
 }
 
